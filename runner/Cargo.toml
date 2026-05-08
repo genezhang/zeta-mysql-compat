@@ -1,0 +1,21 @@
+[package]
+name = "zeta-mysql-compat-runner"
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+description = "MySQL wire-protocol compatibility test runner for Zeta (sqllogictest-based)"
+repository = "https://github.com/genezhang/zeta-mysql-compat"
+
+[dependencies]
+clap = { version = "4", features = ["derive"] }
+tokio = { version = "1", features = ["full"] }
+anyhow = "1"
+sqllogictest = "0.20"
+mysql_async = "0.34"
+async-trait = "0.1"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+[[bin]]
+name = "zeta-mysql-compat-runner"
+path = "src/main.rs"

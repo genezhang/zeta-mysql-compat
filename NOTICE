@@ -1,0 +1,31 @@
+zeta-mysql-compat
+Copyright 2026 Gene Zhang
+
+This product includes software derived from third-party sources. All upstream
+sources used in this repository are permissively licensed (Apache 2.0 or MIT).
+GPL-licensed material is explicitly excluded — see CONTRIBUTING.md.
+
+================================================================================
+Per-directory attribution:
+
+tests/dolt/
+  Derived from Dolt's go-mysql-server enginetest queries.
+  Upstream: https://github.com/dolthub/go-mysql-server
+  License: Apache 2.0
+  See tests/dolt/ATTRIBUTION.md for specific commits/files.
+
+tests/tidb/
+  Derived from TiDB integration tests.
+  Upstream: https://github.com/pingcap/tidb
+  License: Apache 2.0
+  See tests/tidb/ATTRIBUTION.md for specific commits/files.
+
+tests/risingwave/
+  Mirrored from RisingWave e2e_test.
+  Upstream: https://github.com/risingwavelabs/risingwave
+  License: Apache 2.0
+  See tests/risingwave/ATTRIBUTION.md for specific commits/files.
+
+================================================================================
+Runtime dependencies are listed in runner/Cargo.toml; their licenses are
+recorded in the dependency lockfile and Cargo's standard metadata.
