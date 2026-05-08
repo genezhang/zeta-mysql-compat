@@ -17,7 +17,7 @@ struct Args {
     #[arg(long, default_value = "all")]
     suite: String,
 
-    /// Optional: limit to .slt files matching this glob pattern.
+    /// Optional substring filter applied to the .slt path.
     #[arg(long)]
     filter: Option<String>,
 }
@@ -33,8 +33,9 @@ async fn main() -> Result<()> {
 
     let args = Args::parse();
 
-    let _zeta = harness::ZetaServer::start(&args.zeta_bin).await?;
-    slt_runner::run_suite(&args.suite, args.filter.as_deref()).await?;
-
-    Ok(())
+    let mut zeta = harness::ZetaServer::start(&args.zeta_bin).await?;
+    let url = zeta.mysql_url("test");
+    let result = slt_runner::run_suite(&args.suite, &url, args.filter.as_deref()).await;
+    let _ = zeta.shutdown().await;
+    result
 }

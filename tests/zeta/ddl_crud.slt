@@ -1,0 +1,44 @@
+# DDL + CRUD against the MySQL wire — ported from `test_mysql_shim_ddl`
+# and `test_mysql_shim_crud`. Each test file gets a fresh connection
+# and an ephemeral in-memory zeta, so DROPs are belt-and-suspenders.
+
+statement ok
+DROP TABLE IF EXISTS t_ddl
+
+statement ok
+CREATE TABLE t_ddl (id INT PRIMARY KEY, name VARCHAR(100))
+
+statement ok
+INSERT INTO t_ddl (id, name) VALUES (1, 'alpha')
+
+statement ok
+INSERT INTO t_ddl (id, name) VALUES (2, 'beta')
+
+statement ok
+INSERT INTO t_ddl (id, name) VALUES (3, 'gamma')
+
+query IT rowsort
+SELECT id, name FROM t_ddl
+----
+1 alpha
+2 beta
+3 gamma
+
+statement ok
+UPDATE t_ddl SET name = 'BETA' WHERE id = 2
+
+query T
+SELECT name FROM t_ddl WHERE id = 2
+----
+BETA
+
+statement ok
+DELETE FROM t_ddl WHERE id = 3
+
+query I
+SELECT COUNT(*) FROM t_ddl
+----
+2
+
+statement ok
+DROP TABLE t_ddl

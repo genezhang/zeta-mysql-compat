@@ -1,0 +1,63 @@
+# Basic SELECT queries against the MySQL wire — ported from the seed
+# integration test `test_mysql_shim_select_1` and extended with arithmetic,
+# NULL handling, and string literals. No DDL; no session state.
+
+query I
+SELECT 1
+----
+1
+
+query I
+SELECT 1 + 1
+----
+2
+
+query I
+SELECT 10 - 3
+----
+7
+
+query I
+SELECT 6 * 7
+----
+42
+
+query I
+SELECT 100 / 4
+----
+25
+
+query I
+SELECT 17 % 5
+----
+2
+
+query T
+SELECT 'hello'
+----
+hello
+
+query T
+SELECT 'world'
+----
+world
+
+query I
+SELECT NULL
+----
+NULL
+
+query I
+SELECT 1 + NULL
+----
+NULL
+
+query II
+SELECT 1, 2
+----
+1 2
+
+query III
+SELECT 1, 'two', 3
+----
+1 two 3

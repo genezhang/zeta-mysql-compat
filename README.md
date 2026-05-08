@@ -14,15 +14,18 @@ GPL-licensed material (MySQL MTR-derived `.test`/`.result` files and the MTR DSL
 
 ## Status
 
-Skeleton. Runner stub builds; suites are empty. Will be populated as Zeta's MySQL surface and binlog implementation land.
+**M0 — first suites green.** Runner spawns zeta, drives `.slt` files via `sqllogictest` over the MySQL wire, and reports per-file pass/fail. `tests/zeta/select_basic.slt` and `tests/zeta/ddl_crud.slt` pass against the current `zeta` binary. Other suites (`dolt/`, `tidb/`, `risingwave/`, `binlog-e2e/`) are still empty and will be populated as Zeta's MySQL surface and binlog implementation land.
 
 ## Running
 
+Build a `zeta` binary in the main repo (`cargo build -p zeta-server-bin`), then:
+
 ```
-cargo run --release -- --zeta-bin <path-to-zeta-binary> --suite all
+cd runner
+cargo run -- --zeta-bin /path/to/zeta --suite zeta
 ```
 
-The runner spawns the supplied `zeta` binary on an ephemeral port and drives test suites against its MySQL wire protocol.
+`--suite all` walks every directory under `tests/`. `--filter <substring>` limits to matching `.slt` paths. The runner picks a free port, spawns `zeta --no-pg --bind 127.0.0.1 --mysql-port <port> --storage-backend memory`, waits for the listener-ready banner, then runs each `.slt` file with a fresh `mysql_async` connection.
 
 ## License
 
