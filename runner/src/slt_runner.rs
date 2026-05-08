@@ -102,17 +102,8 @@ struct ZetaConn {
 
 impl ZetaConn {
     async fn connect(url: &str) -> Result<Self, ZetaConnError> {
-        let base =
+        let opts =
             mysql_async::Opts::from_url(url).map_err(|e| ZetaConnError::msg(e.to_string()))?;
-        // Pre-populate session settings so mysql_async skips the post-handshake
-        // `SELECT @@socket, @@max_allowed_packet, @@wait_timeout` probe — zeta's
-        // MySQL wire doesn't return these as integers and the probe panics in
-        // mysql_common's value conversion.
-        let opts: mysql_async::Opts = mysql_async::OptsBuilder::from_opts(base)
-            .prefer_socket(false)
-            .max_allowed_packet(Some(16 * 1024 * 1024))
-            .wait_timeout(Some(28800))
-            .into();
         let conn = mysql_async::Conn::new(opts)
             .await
             .map_err(|e| ZetaConnError::msg(e.to_string()))?;
