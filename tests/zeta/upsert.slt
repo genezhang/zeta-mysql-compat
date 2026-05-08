@@ -1,0 +1,33 @@
+# INSERT ... ON DUPLICATE KEY UPDATE — ported from
+# `test_mysql_on_duplicate_key_update`.
+
+statement ok
+DROP TABLE IF EXISTS upsert_test
+
+statement ok
+CREATE TABLE upsert_test (id INT PRIMARY KEY, name VARCHAR(100), hits INT)
+
+statement ok
+INSERT INTO upsert_test (id, name, hits) VALUES (1, 'Alice', 1)
+
+# Conflicting INSERT: should update name and hits to the VALUES() of the
+# pending row.
+statement ok
+INSERT INTO upsert_test (id, name, hits) VALUES (1, 'Alice2', 2) ON DUPLICATE KEY UPDATE name = VALUES(name), hits = VALUES(hits)
+
+query TI
+SELECT name, hits FROM upsert_test WHERE id = 1
+----
+Alice2 2
+
+# No conflict: a new row is inserted.
+statement ok
+INSERT INTO upsert_test (id, name, hits) VALUES (2, 'Bob', 1) ON DUPLICATE KEY UPDATE name = VALUES(name), hits = VALUES(hits)
+
+query I
+SELECT COUNT(*) FROM upsert_test
+----
+2
+
+statement ok
+DROP TABLE upsert_test

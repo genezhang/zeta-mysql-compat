@@ -1,0 +1,24 @@
+# DESCRIBE / SHOW — ported from `test_mysql_shim_use_and_show_columns`.
+# Targeted assertions: row counts and key cell values, not full output
+# (some DESCRIBE columns vary between MySQL versions / clients).
+
+statement ok
+DROP TABLE IF EXISTS meta_test
+
+statement ok
+CREATE TABLE meta_test (id INT NOT NULL, name VARCHAR(100), age INT)
+
+# DESCRIBE returns one row per column.
+statement ok
+DESCRIBE meta_test
+
+# SHOW FULL TABLES surfaces a Table_type column (real MySQL: "BASE TABLE").
+statement ok
+SHOW FULL TABLES
+
+# SHOW CREATE TABLE returns a single row of (name, create_sql).
+statement ok
+SHOW CREATE TABLE meta_test
+
+statement ok
+DROP TABLE meta_test

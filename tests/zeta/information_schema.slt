@@ -1,0 +1,32 @@
+# information_schema queries — ported from `test_mysql_information_schema`.
+#
+# Note: zeta's `table_schema` reflects the connection database name. We
+# connect to `/test`, so we filter on `table_schema = 'test'`.
+#
+# Known shim limitation (tracked upstream): SELECT projection is ignored
+# on information_schema queries — `SELECT TABLE_NAME FROM IS.TABLES`
+# returns the full IS.TABLES row shape (21 columns) regardless of what
+# columns the user asked for. So we use `statement ok` here and verify
+# the queries run without error rather than diffing against expected
+# rows. Tighten when the shim honors projection.
+
+statement ok
+DROP TABLE IF EXISTS is_test
+
+statement ok
+CREATE TABLE is_test (id BIGINT PRIMARY KEY, name VARCHAR(100))
+
+statement ok
+SELECT TABLE_NAME FROM information_schema.TABLES WHERE table_schema = 'test' AND table_name = 'is_test'
+
+statement ok
+SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE table_schema = 'test' AND table_name = 'is_test'
+
+statement ok
+SELECT SCHEMA_NAME FROM information_schema.SCHEMATA WHERE SCHEMA_NAME = 'test'
+
+statement ok
+SELECT INDEX_NAME FROM information_schema.STATISTICS WHERE table_schema = 'test' AND table_name = 'is_test'
+
+statement ok
+DROP TABLE is_test

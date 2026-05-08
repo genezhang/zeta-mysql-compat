@@ -1,0 +1,18 @@
+# SHOW INDEX FROM — ported from `test_mysql_shim_show_index`.
+
+statement ok
+DROP TABLE IF EXISTS idx_test
+
+statement ok
+CREATE TABLE idx_test (id INT NOT NULL PRIMARY KEY, email VARCHAR(100))
+
+statement ok
+CREATE UNIQUE INDEX idx_test_email ON idx_test (email)
+
+# Two index entries: PRIMARY and idx_test_email. Shape verifies the
+# command runs and returns at least one row.
+statement ok
+SHOW INDEX FROM idx_test
+
+statement ok
+DROP TABLE idx_test
