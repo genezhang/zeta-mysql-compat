@@ -1,0 +1,84 @@
+# String functions beyond the basics in types_string.slt — POSITION,
+# REPEAT, REVERSE, REGEXP_REPLACE, LPAD/RPAD.
+#
+# Gaps tracked (#970): SUBSTRING_INDEX, INSTR, LOCATE, FORMAT are
+# unknown. They're pinned as `statement error` so a future fix lands
+# as a noisy diff.
+
+# POSITION — 1-based, returns 0 when not found.
+query I
+SELECT POSITION('br' IN 'the quick brown fox')
+----
+11
+
+query I
+SELECT POSITION('zz' IN 'the quick brown fox')
+----
+0
+
+# REPEAT.
+query T
+SELECT REPEAT('ab', 3)
+----
+ababab
+
+# REVERSE.
+query T
+SELECT REVERSE('hello')
+----
+olleh
+
+# STARTS_WITH.
+query I
+SELECT CASE WHEN STARTS_WITH('hello world', 'hello') THEN 1 ELSE 0 END
+----
+1
+
+query I
+SELECT CASE WHEN STARTS_WITH('hello world', 'world') THEN 1 ELSE 0 END
+----
+0
+
+# REGEXP_MATCHES — returns matched groups (PG syntax).
+# Just verify it doesn't error and returns text.
+query T
+SELECT REGEXP_REPLACE('abc123def', '[0-9]+', 'X')
+----
+abcXdef
+
+# SPLIT_PART — pull the Nth field of a delimiter-separated string.
+query T
+SELECT SPLIT_PART('foo,bar,baz', ',', 2)
+----
+bar
+
+# CONCAT — already covered, here just as a baseline.
+query T
+SELECT CONCAT('a', 'b', 'c')
+----
+abc
+
+# LPAD / RPAD — common MySQL string-padding functions.
+query T
+SELECT LPAD('7', 3, '0')
+----
+007
+
+query T
+SELECT RPAD('7', 3, '0')
+----
+700
+
+# MySQL-specific functions currently rejected — see #970. Pinned as
+# statement-error so a future fix is a noisy diff.
+statement error
+SELECT SUBSTRING_INDEX('foo.bar.baz', '.', 2)
+
+statement error
+SELECT INSTR('the quick brown fox', 'brown')
+
+statement error
+SELECT LOCATE('brown', 'the quick brown fox')
+
+statement error
+SELECT FORMAT(1234567.891, 2)

@@ -1,0 +1,127 @@
+# Table constraints over the MySQL wire — PRIMARY KEY, UNIQUE,
+# FOREIGN KEY (RESTRICT), CHECK, NOT NULL.
+#
+# Each constraint is exercised both for "happy path" (insert allowed)
+# and "violation" (insert rejected).
+
+statement ok
+DROP TABLE IF EXISTS c_child
+
+statement ok
+DROP TABLE IF EXISTS c_parent
+
+# --- PRIMARY KEY ---
+statement ok
+CREATE TABLE c_pk (id INT PRIMARY KEY, name VARCHAR(50))
+
+statement ok
+INSERT INTO c_pk VALUES (1, 'Alice')
+
+# Duplicate PK: rejected.
+statement error
+INSERT INTO c_pk VALUES (1, 'AliceDup')
+
+# Missing PK: rejected (NULL not allowed).
+statement error
+INSERT INTO c_pk (name) VALUES ('Anon')
+
+statement ok
+DROP TABLE c_pk
+
+# --- UNIQUE ---
+statement ok
+CREATE TABLE c_unique (id INT PRIMARY KEY, email VARCHAR(100) UNIQUE)
+
+statement ok
+INSERT INTO c_unique VALUES (1, 'a@example.com')
+
+statement ok
+INSERT INTO c_unique VALUES (2, 'b@example.com')
+
+# Duplicate email: rejected.
+statement error
+INSERT INTO c_unique VALUES (3, 'a@example.com')
+
+# NULL is allowed multiple times in a UNIQUE column (PG/MySQL semantics).
+statement ok
+INSERT INTO c_unique VALUES (4, NULL)
+
+statement ok
+INSERT INTO c_unique VALUES (5, NULL)
+
+query I
+SELECT COUNT(*) FROM c_unique
+----
+4
+
+statement ok
+DROP TABLE c_unique
+
+# --- NOT NULL ---
+statement ok
+CREATE TABLE c_nn (id INT PRIMARY KEY, name VARCHAR(50) NOT NULL)
+
+statement ok
+INSERT INTO c_nn VALUES (1, 'Alice')
+
+# Missing required column: rejected.
+statement error
+INSERT INTO c_nn (id) VALUES (2)
+
+# Explicit NULL: rejected.
+statement error
+INSERT INTO c_nn VALUES (3, NULL)
+
+statement ok
+DROP TABLE c_nn
+
+# --- CHECK ---
+# Note: column-level inline `CHECK` is broken (#969) — the constraint
+# is mis-routed during parsing and shows up at INSERT time as
+# "unknown function: CHECK". Use the table-level form instead.
+statement ok
+CREATE TABLE c_check (id INT PRIMARY KEY, age INT, CHECK (age >= 0))
+
+statement ok
+INSERT INTO c_check VALUES (1, 25)
+
+# Negative age: rejected.
+statement error
+INSERT INTO c_check VALUES (2, -5)
+
+statement ok
+DROP TABLE c_check
+
+# --- FOREIGN KEY (RESTRICT) ---
+statement ok
+CREATE TABLE c_parent (id INT PRIMARY KEY, name VARCHAR(50))
+
+statement ok
+CREATE TABLE c_child (id INT PRIMARY KEY, parent_id INT, FOREIGN KEY (parent_id) REFERENCES c_parent(id))
+
+statement ok
+INSERT INTO c_parent VALUES (1, 'parent-a'), (2, 'parent-b')
+
+statement ok
+INSERT INTO c_child VALUES (10, 1), (11, 2)
+
+# Insert child referencing missing parent: rejected.
+statement error
+INSERT INTO c_child VALUES (12, 99)
+
+# Delete parent that has children: rejected (RESTRICT).
+statement error
+DELETE FROM c_parent WHERE id = 1
+
+# After deleting children, the parent can be deleted.
+statement ok
+DELETE FROM c_child WHERE parent_id = 1
+
+statement ok
+DELETE FROM c_parent WHERE id = 1
+
+statement ok
+DROP TABLE c_child
+
+statement ok
+DROP TABLE c_parent
