@@ -1,0 +1,31 @@
+# Views over the MySQL wire — currently unusable. See zeta #972: the
+# CREATE VIEW body resolver looks for tables in the bare `public`
+# schema instead of the MySQL connection's current database, so any
+# view that references a table created over the same MySQL wire
+# connection fails to plan.
+#
+# This file pins the rejection. Once #972 lands, replace these
+# statement-error blocks with the original view body / SELECT pairs
+# and remove this header note.
+
+statement ok
+DROP TABLE IF EXISTS v_users
+
+statement ok
+CREATE TABLE v_users (id INT PRIMARY KEY, name VARCHAR(50), active BOOLEAN)
+
+statement ok
+INSERT INTO v_users VALUES (1, 'Alice', TRUE), (2, 'Bob', FALSE)
+
+# Simple view — currently rejected by the view-body resolver (#972).
+statement error
+CREATE VIEW v_active AS SELECT id, name FROM v_users WHERE active = TRUE
+
+# View over a join + aggregate — also rejected (#972).
+statement error
+CREATE VIEW v_join AS
+  SELECT u.id, u.name, COUNT(*) AS n
+  FROM v_users u GROUP BY u.id, u.name
+
+statement ok
+DROP TABLE v_users

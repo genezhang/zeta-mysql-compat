@@ -1,0 +1,33 @@
+# Temporary tables over the MySQL wire — CREATE TEMPORARY TABLE,
+# behavior on the same connection. (Real session-scoped lifetime
+# can't be exercised from a single .slt file; the runner uses one
+# connection per file.)
+
+statement ok
+DROP TABLE IF EXISTS tt_t
+
+statement ok
+CREATE TEMPORARY TABLE tt_t (id INT PRIMARY KEY, name VARCHAR(50))
+
+statement ok
+INSERT INTO tt_t VALUES (1, 'tmp-a'), (2, 'tmp-b')
+
+query IT rowsort
+SELECT id, name FROM tt_t
+----
+1 tmp-a
+2 tmp-b
+
+# Aggregate / filter on the temp table.
+query I
+SELECT COUNT(*) FROM tt_t WHERE id = 1
+----
+1
+
+# CREATE TEMPORARY TABLE AS SELECT — currently fails with an internal
+# error (#974). Pinned to that rejection.
+statement error
+CREATE TEMPORARY TABLE tt_copy AS SELECT * FROM tt_t WHERE id = 1
+
+statement ok
+DROP TABLE tt_t
