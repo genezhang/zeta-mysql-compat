@@ -1,14 +1,10 @@
-# Multi-table UPDATE / DELETE over the MySQL wire — currently both
-# dialects fail in different ways (zeta #973):
-#   - PG-style `UPDATE ... FROM other` errors with "table not found:
-#     other" (search_path not consulted in the FROM resolver).
-#   - MySQL-style `UPDATE t1 JOIN t2 ON ... SET ...` errors with
-#     "column not found: u.val" (parser accepts but qualified column
-#     refs in SET aren't resolved through the JOIN aliases).
+# Multi-table UPDATE / DELETE over the MySQL wire — fixed in zeta #973.
 #
-# Single-table UPDATE / DELETE work fine (covered in ddl_crud.slt /
-# txn.slt). This file pins the multi-table rejections so a future fix
-# lands as a noisy diff.
+# Two dialects, four shapes, all working now:
+#   - PG-style `UPDATE u SET … FROM o WHERE …`
+#   - MySQL-style `UPDATE u JOIN o ON … SET …` (desugared to UPDATE FROM)
+#   - PG-style `DELETE FROM t USING t2 WHERE …`
+#   - MySQL-style `DELETE t FROM t JOIN t2 ON … WHERE …` (desugared to DELETE USING)
 
 statement ok
 DROP TABLE IF EXISTS udj_orders
@@ -23,33 +19,51 @@ statement ok
 CREATE TABLE udj_orders (id INT PRIMARY KEY, user_id INT, amount INT)
 
 statement ok
-INSERT INTO udj_users VALUES (1, 'Alice', 0)
+INSERT INTO udj_users VALUES (1, 'Alice', 0), (2, 'Bob', 0)
 
 statement ok
-INSERT INTO udj_orders VALUES (10, 1, 100)
+INSERT INTO udj_orders VALUES (10, 1, 100), (11, 1, 50), (12, 2, 200)
 
-# PG-style UPDATE FROM — pinned to current rejection (#973).
-statement error
-UPDATE udj_users u SET spend = o.amount FROM udj_orders o WHERE o.user_id = u.id
+# PG-style UPDATE FROM — sets each user's spend from the matching order.
+statement ok
+UPDATE udj_users u SET spend = o.amount FROM udj_orders o WHERE o.user_id = u.id AND o.id = 10
 
-# MySQL-style UPDATE JOIN — pinned to current rejection (#973).
-statement error
-UPDATE udj_users u JOIN udj_orders o ON o.user_id = u.id SET u.spend = u.spend + o.amount
+query IT rowsort
+SELECT id, spend FROM udj_users
+----
+1 100
+2 0
 
-# PG-style DELETE USING — pinned (#973).
-statement error
-DELETE FROM udj_orders USING udj_users WHERE udj_orders.user_id = udj_users.id AND udj_users.id = 1
+# MySQL-style UPDATE JOIN — equivalent to UPDATE u SET … FROM o WHERE c.
+statement ok
+UPDATE udj_users u JOIN udj_orders o ON o.user_id = u.id SET u.spend = u.spend + o.amount WHERE o.id = 11
 
-# MySQL-style DELETE FROM with JOIN — silent no-op (#973). Returns
-# OK but deletes nothing. Pinned: rows survive.
+query IT rowsort
+SELECT id, spend FROM udj_users
+----
+1 150
+2 0
+
+# PG-style DELETE USING — delete orders for a specific user.
+statement ok
+DELETE FROM udj_orders USING udj_users WHERE udj_orders.user_id = udj_users.id AND udj_users.id = 1 AND udj_orders.id = 10
+
+# After: orders 11 (user 1) and 12 (user 2) survive.
+query III rowsort
+SELECT id, user_id, amount FROM udj_orders
+----
+11 1 50
+12 2 200
+
+# MySQL-style DELETE JOIN — delete remaining orders for user 1.
 statement ok
 DELETE o FROM udj_orders o JOIN udj_users u ON o.user_id = u.id WHERE u.id = 1
 
-# All rows still present — confirms the no-op.
-query I
-SELECT COUNT(*) FROM udj_orders WHERE user_id = 1
+# After: only user-2's order survives.
+query III rowsort
+SELECT id, user_id, amount FROM udj_orders
 ----
-1
+12 2 200
 
 statement ok
 DROP TABLE udj_orders
