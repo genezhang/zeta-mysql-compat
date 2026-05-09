@@ -1,0 +1,89 @@
+# Transactions over the MySQL wire — currently a major gap. See zeta #961.
+#
+# The MySQL shim doesn't have per-session txn state, so BEGIN /
+# START TRANSACTION / COMMIT / ROLLBACK are effectively no-ops: every
+# statement auto-commits. This file is pinned to that observed behavior;
+# once #961 lands, tighten the assertions to real transactional semantics
+# (ROLLBACK should undo writes, in-txn reads should see only the txn's
+# own writes, etc.).
+
+statement ok
+DROP TABLE IF EXISTS txn_t
+
+statement ok
+CREATE TABLE txn_t (id INT PRIMARY KEY, name VARCHAR(50))
+
+statement ok
+INSERT INTO txn_t VALUES (1, 'pre-commit')
+
+# Baseline: one row.
+query IT
+SELECT id, name FROM txn_t
+----
+1 pre-commit
+
+# COMMIT path — accepted, but the prior INSERT was already auto-committed.
+statement ok
+BEGIN
+
+statement ok
+INSERT INTO txn_t VALUES (2, 'committed')
+
+query IT rowsort
+SELECT id, name FROM txn_t
+----
+1 pre-commit
+2 committed
+
+statement ok
+COMMIT
+
+query IT rowsort
+SELECT id, name FROM txn_t
+----
+1 pre-commit
+2 committed
+
+# ROLLBACK path — should undo writes, but currently does not (#961).
+# This block documents the broken behavior so a fix lands as a noisy diff.
+statement ok
+BEGIN
+
+statement ok
+INSERT INTO txn_t VALUES (3, 'rolled-back')
+
+statement ok
+UPDATE txn_t SET name = 'modified' WHERE id = 1
+
+statement ok
+ROLLBACK
+
+# Real MySQL would show only the original 2 rows here; zeta retains
+# the writes from the failed/rolled-back txn. Pinned to observed.
+query IT rowsort
+SELECT id, name FROM txn_t
+----
+1 modified
+2 committed
+3 rolled-back
+
+# START TRANSACTION accepted as a synonym for BEGIN (also a no-op currently).
+statement ok
+START TRANSACTION
+
+statement ok
+INSERT INTO txn_t VALUES (4, 'st-tx')
+
+statement ok
+COMMIT
+
+query IT rowsort
+SELECT id, name FROM txn_t
+----
+1 modified
+2 committed
+3 rolled-back
+4 st-tx
+
+statement ok
+DROP TABLE txn_t

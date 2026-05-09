@@ -1,0 +1,103 @@
+# Subqueries over the MySQL wire — scalar, IN, NOT IN, EXISTS, NOT EXISTS,
+# and a correlated subquery. Two-table fixture: customers + orders, with
+# one customer having no orders so EXISTS / NOT EXISTS produce different
+# row counts.
+
+statement ok
+DROP TABLE IF EXISTS sq_orders
+
+statement ok
+DROP TABLE IF EXISTS sq_customers
+
+statement ok
+CREATE TABLE sq_customers (id INT PRIMARY KEY, name VARCHAR(50), tier INT)
+
+statement ok
+CREATE TABLE sq_orders (id INT PRIMARY KEY, customer_id INT, amount INT)
+
+statement ok
+INSERT INTO sq_customers VALUES (1, 'Alice', 1), (2, 'Bob', 2), (3, 'Carol', 1), (4, 'Dave', 2)
+
+# Alice has 2 orders, Bob has 1 order, Carol has 1 order, Dave has none.
+statement ok
+INSERT INTO sq_orders VALUES (100, 1, 50), (101, 1, 75), (102, 2, 200), (103, 3, 30)
+
+# Scalar subquery in SELECT — per-customer order count.
+query TI rowsort
+SELECT name, (SELECT COUNT(*) FROM sq_orders WHERE customer_id = sq_customers.id)
+FROM sq_customers
+----
+Alice 2
+Bob 1
+Carol 1
+Dave 0
+
+# Scalar subquery in WHERE.
+query T rowsort
+SELECT name FROM sq_customers WHERE id = (SELECT MAX(customer_id) FROM sq_orders)
+----
+Carol
+
+# IN with a subquery — customers who have at least one order.
+query T rowsort
+SELECT name FROM sq_customers WHERE id IN (SELECT customer_id FROM sq_orders)
+----
+Alice
+Bob
+Carol
+
+# NOT IN — customers without orders.
+query T rowsort
+SELECT name FROM sq_customers WHERE id NOT IN (SELECT customer_id FROM sq_orders)
+----
+Dave
+
+# EXISTS — same set as IN here, expressed differently.
+query T rowsort
+SELECT name FROM sq_customers c
+WHERE EXISTS (SELECT 1 FROM sq_orders o WHERE o.customer_id = c.id)
+----
+Alice
+Bob
+Carol
+
+# NOT EXISTS.
+query T rowsort
+SELECT name FROM sq_customers c
+WHERE NOT EXISTS (SELECT 1 FROM sq_orders o WHERE o.customer_id = c.id)
+----
+Dave
+
+# Correlated subquery returning per-row aggregate.
+query TI rowsort
+SELECT name, (SELECT SUM(amount) FROM sq_orders o WHERE o.customer_id = c.id)
+FROM sq_customers c
+----
+Alice 125
+Bob 200
+Carol 30
+Dave NULL
+
+# Subquery in the FROM clause (derived table).
+query TI rowsort
+SELECT c.name, t.total
+FROM sq_customers c
+JOIN (SELECT customer_id, SUM(amount) AS total FROM sq_orders GROUP BY customer_id) t
+  ON t.customer_id = c.id
+----
+Alice 125
+Bob 200
+Carol 30
+
+# IN with a literal list (degenerate subquery form).
+query T rowsort
+SELECT name FROM sq_customers WHERE tier IN (1)
+----
+Alice
+Carol
+
+statement ok
+DROP TABLE sq_orders
+
+statement ok
+DROP TABLE sq_customers
