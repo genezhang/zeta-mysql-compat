@@ -1,12 +1,16 @@
-# Views over the MySQL wire — currently unusable. See zeta #972: the
-# CREATE VIEW body resolver looks for tables in the bare `public`
-# schema instead of the MySQL connection's current database, so any
-# view that references a table created over the same MySQL wire
-# connection fails to plan.
+# Views over the MySQL wire — fixed in zeta #972.
 #
-# This file pins the rejection. Once #972 lands, replace these
-# statement-error blocks with the original view body / SELECT pairs
-# and remove this header note.
+# Before the fix, the CREATE VIEW body resolver hardcoded the search_path
+# to `["public"]` regardless of the connection's current database, so any
+# view referencing a table created over the same MySQL connection failed
+# to plan. Now the active connection search_path is plumbed through via
+# the `STATEMENT_SEARCH_PATH` task-local.
+
+statement ok
+DROP VIEW IF EXISTS v_join
+
+statement ok
+DROP VIEW IF EXISTS v_active
 
 statement ok
 DROP TABLE IF EXISTS v_users
@@ -15,17 +19,35 @@ statement ok
 CREATE TABLE v_users (id INT PRIMARY KEY, name VARCHAR(50), active BOOLEAN)
 
 statement ok
-INSERT INTO v_users VALUES (1, 'Alice', TRUE), (2, 'Bob', FALSE)
+INSERT INTO v_users VALUES (1, 'Alice', TRUE), (2, 'Bob', FALSE), (3, 'Carol', TRUE)
 
-# Simple view — currently rejected by the view-body resolver (#972).
-statement error
+# Simple view — single-table SELECT with WHERE.
+statement ok
 CREATE VIEW v_active AS SELECT id, name FROM v_users WHERE active = TRUE
 
-# View over a join + aggregate — also rejected (#972).
-statement error
+query IT rowsort
+SELECT id, name FROM v_active
+----
+1 Alice
+3 Carol
+
+# View over an aggregate.
+statement ok
 CREATE VIEW v_join AS
-  SELECT u.id, u.name, COUNT(*) AS n
-  FROM v_users u GROUP BY u.id, u.name
+  SELECT active, COUNT(*) AS n
+  FROM v_users GROUP BY active
+
+query IB rowsort
+SELECT n, active FROM v_join
+----
+1 0
+2 1
+
+statement ok
+DROP VIEW v_join
+
+statement ok
+DROP VIEW v_active
 
 statement ok
 DROP TABLE v_users
