@@ -1,10 +1,7 @@
-# Date/time functions over the MySQL wire.
-#
-# Gaps tracked (all #966):
-#   - DATE_ADD / DATE_SUB are unrecognized — migration-blocking.
-#   - DATEDIFF is unrecognized — migration-blocking.
-# This file uses the PG `+ INTERVAL` form for arithmetic, which works.
-# Restore the DATE_ADD / DATE_SUB / DATEDIFF blocks when #966 lands.
+# Date/time functions over the MySQL wire — DATE_ADD / DATE_SUB /
+# DATEDIFF / ADDDATE / SUBDATE fixed in zeta #966 (rewritten in the
+# parser converter to PG-style `+ INTERVAL` / `- INTERVAL` and
+# `Date - Date` operators).
 
 # CURRENT_DATE / CURRENT_TIMESTAMP / NOW return values — we can't pin
 # their values, but can pin their types and that they return non-NULL.
@@ -18,8 +15,7 @@ SELECT CASE WHEN NOW() IS NULL THEN 0 ELSE 1 END
 ----
 1
 
-# Adding INTERVAL with the + operator (PG-style, also accepted by MySQL).
-# DATE_ADD / DATE_SUB MySQL spellings are unrecognized — see #966.
+# PG-style + INTERVAL.
 query T
 SELECT DATE '2026-01-15' + INTERVAL '1 month'
 ----
@@ -30,7 +26,54 @@ SELECT TIMESTAMP '2026-01-15 12:00:00' + INTERVAL '90 minutes'
 ----
 2026-01-15 13:30:00
 
-# DATEDIFF intentionally omitted — see #966.
+# MySQL DATE_ADD / DATE_SUB — rewritten to + / - INTERVAL.
+query T
+SELECT DATE_ADD(DATE '2026-01-15', INTERVAL '7 days')
+----
+2026-01-22 00:00:00
+
+query T
+SELECT DATE_SUB(DATE '2026-01-15', INTERVAL '7 days')
+----
+2026-01-08 00:00:00
+
+query T
+SELECT DATE_ADD(TIMESTAMP '2026-01-15 12:00:00', INTERVAL '90 minutes')
+----
+2026-01-15 13:30:00
+
+# ADDDATE / SUBDATE — MySQL aliases.
+query T
+SELECT ADDDATE(DATE '2026-01-15', INTERVAL '2 weeks')
+----
+2026-01-29 00:00:00
+
+query T
+SELECT SUBDATE(DATE '2026-01-15', INTERVAL '1 month')
+----
+2025-12-15 00:00:00
+
+# DATEDIFF — MySQL semantics: integer day delta (d1 - d2).
+query I
+SELECT DATEDIFF(DATE '2026-02-15', DATE '2026-01-15')
+----
+31
+
+query I
+SELECT DATEDIFF(DATE '2026-01-15', DATE '2026-02-15')
+----
+-31
+
+query I
+SELECT DATEDIFF(DATE '2026-01-15', DATE '2026-01-15')
+----
+0
+
+# DATEDIFF accepts TIMESTAMP too — both sides cast to DATE first.
+query I
+SELECT DATEDIFF(TIMESTAMP '2026-02-15 23:59:59', TIMESTAMP '2026-01-15 00:00:01')
+----
+31
 
 # EXTRACT — already covered in types_datetime, repeated for completeness.
 query I
