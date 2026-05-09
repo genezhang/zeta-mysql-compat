@@ -1,0 +1,50 @@
+# SAVEPOINT / ROLLBACK TO SAVEPOINT / RELEASE SAVEPOINT over the MySQL
+# wire. These all sit on top of the multi-statement transaction
+# machinery that's currently a no-op (see #961 — every statement
+# auto-commits). So savepoints are also no-ops by transitivity.
+#
+# This file documents that and pins the observed behavior. Once #961
+# lands, this file becomes the meaningful test for savepoint semantics.
+
+statement ok
+DROP TABLE IF EXISTS sp_t
+
+statement ok
+CREATE TABLE sp_t (id INT PRIMARY KEY, name VARCHAR(50))
+
+statement ok
+INSERT INTO sp_t VALUES (1, 'pre')
+
+statement ok
+BEGIN
+
+statement ok
+INSERT INTO sp_t VALUES (2, 'before-sp')
+
+statement ok
+SAVEPOINT sp1
+
+statement ok
+INSERT INTO sp_t VALUES (3, 'after-sp')
+
+statement ok
+ROLLBACK TO SAVEPOINT sp1
+
+# Real semantics: row 3 should be gone, row 2 should remain. Currently
+# the entire enclosing transaction is auto-committed, so the savepoint
+# can't undo anything. Both rows survive.
+query IT rowsort
+SELECT id, name FROM sp_t
+----
+1 pre
+2 before-sp
+3 after-sp
+
+statement ok
+RELEASE SAVEPOINT sp1
+
+statement ok
+COMMIT
+
+statement ok
+DROP TABLE sp_t

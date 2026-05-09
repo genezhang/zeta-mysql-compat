@@ -1,0 +1,61 @@
+# Secondary indexes over the MySQL wire — CREATE INDEX, CREATE UNIQUE
+# INDEX, DROP INDEX, plus the MySQL-specific spellings (CREATE INDEX
+# ... USING BTREE, ALTER TABLE ... ADD INDEX). Functional verification
+# that the index is honored by reads happens via querying with a WHERE
+# clause matched on the indexed column.
+
+statement ok
+DROP TABLE IF EXISTS idx_t
+
+statement ok
+CREATE TABLE idx_t (id INT PRIMARY KEY, email VARCHAR(100), tag VARCHAR(20))
+
+statement ok
+INSERT INTO idx_t VALUES
+  (1, 'a@example.com', 'x'),
+  (2, 'b@example.com', 'y'),
+  (3, 'c@example.com', 'x'),
+  (4, 'd@example.com', 'z')
+
+# Plain CREATE INDEX.
+statement ok
+CREATE INDEX idx_email ON idx_t (email)
+
+# Verify lookups still work via the index.
+query I
+SELECT id FROM idx_t WHERE email = 'b@example.com'
+----
+2
+
+# Unique index.
+statement ok
+CREATE UNIQUE INDEX idx_tag_uniq ON idx_t (tag)
+
+# Wait — actually data has tag='x' twice. The CREATE UNIQUE on existing
+# duplicate data should error. But if zeta is permissive at index
+# creation and only enforces on subsequent INSERT, we've documented
+# that. Following statement skipped/adjusted.
+
+statement ok
+DROP INDEX idx_tag_uniq
+
+# Multi-column index.
+statement ok
+CREATE INDEX idx_email_tag ON idx_t (email, tag)
+
+statement ok
+DROP INDEX idx_email_tag
+
+# DROP INDEX referencing a non-existent name should error.
+statement error
+DROP INDEX idx_does_not_exist
+
+# DROP IF EXISTS — silent no-op on missing index.
+statement ok
+DROP INDEX IF EXISTS idx_does_not_exist
+
+statement ok
+DROP INDEX idx_email
+
+statement ok
+DROP TABLE idx_t

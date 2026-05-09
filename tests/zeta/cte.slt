@@ -1,0 +1,69 @@
+# Common Table Expressions over the MySQL wire.
+#
+# Single-CTE-from-top-FROM and recursive CTEs work. Two gaps tracked:
+#   - CTE names are invisible inside subqueries / derived tables (#975).
+#     Only the top-level FROM of the WITH-bearing query resolves them.
+#   - Multi-CTE WITH is partially affected because the outer query
+#     usually has to reference both CTEs from subqueries to combine
+#     them — same root cause as #975.
+
+statement ok
+DROP TABLE IF EXISTS cte_t
+
+statement ok
+CREATE TABLE cte_t (id INT PRIMARY KEY, parent_id INT, name VARCHAR(50))
+
+# Tree:
+#   1 (root)
+#   ├─ 2
+#   │  └─ 4
+#   └─ 3
+statement ok
+INSERT INTO cte_t VALUES (1, NULL, 'root'), (2, 1, 'a'), (3, 1, 'b'), (4, 2, 'a-leaf')
+
+# Non-recursive CTE — single named subquery, referenced from top-level FROM.
+query IT rowsort
+WITH children AS (SELECT id, name FROM cte_t WHERE parent_id IS NOT NULL)
+SELECT id, name FROM children
+----
+2 a
+3 b
+4 a-leaf
+
+# CTE with aggregate inside.
+query II rowsort
+WITH counts AS (
+  SELECT parent_id, COUNT(*) AS n FROM cte_t WHERE parent_id IS NOT NULL GROUP BY parent_id
+)
+SELECT parent_id, n FROM counts
+----
+1 2
+2 1
+
+# Recursive CTE — descend the tree. Self-reference inside the
+# recursive term works because that's a special-cased binder path.
+query IT
+WITH RECURSIVE descendants AS (
+  SELECT id, name FROM cte_t WHERE id = 1
+  UNION ALL
+  SELECT c.id, c.name FROM cte_t c JOIN descendants d ON c.parent_id = d.id
+)
+SELECT id, name FROM descendants ORDER BY id
+----
+1 root
+2 a
+3 b
+4 a-leaf
+
+# CTE referenced from a scalar subquery — currently rejected (#975).
+statement error
+WITH a AS (SELECT id FROM cte_t WHERE parent_id IS NULL)
+SELECT (SELECT COUNT(*) FROM a)
+
+# CTE referenced from a derived table — currently rejected (#975).
+statement error
+WITH a AS (SELECT id FROM cte_t)
+SELECT COUNT(*) FROM (SELECT * FROM a) x
+
+statement ok
+DROP TABLE cte_t
