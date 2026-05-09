@@ -1,0 +1,63 @@
+# JSON/JSONB over the MySQL wire. MySQL has a `JSON` type (since 5.7);
+# zeta has PG's `JSONB`. The shim should accept `JSON` as a synonym
+# but the on-wire type may differ.
+
+statement ok
+DROP TABLE IF EXISTS j_t
+
+# Try the PG type name.
+statement ok
+CREATE TABLE j_t (id INT PRIMARY KEY, doc JSONB)
+
+statement ok
+INSERT INTO j_t VALUES
+  (1, '{"name": "Alice", "age": 30, "tags": ["a", "b"]}'),
+  (2, '{"name": "Bob",   "age": 25, "tags": ["c"]}'),
+  (3, '{"name": "Carol", "age": 40}')
+
+# JSONB extraction — `->>` returns text.
+query T rowsort
+SELECT doc ->> 'name' FROM j_t
+----
+Alice
+Bob
+Carol
+
+# `->` returns JSONB (as a string in result here).
+query T
+SELECT (doc -> 'tags') FROM j_t WHERE id = 1
+----
+["a","b"]
+
+# Nested extraction.
+query T
+SELECT doc -> 'tags' ->> 0 FROM j_t WHERE id = 1
+----
+a
+
+# JSONB containment.
+query I
+SELECT COUNT(*) FROM j_t WHERE doc @> '{"name": "Alice"}'
+----
+1
+
+# JSONB key existence.
+query I
+SELECT COUNT(*) FROM j_t WHERE doc ? 'tags'
+----
+2
+
+# JSONB_BUILD_OBJECT.
+query T
+SELECT JSONB_BUILD_OBJECT('a', 1, 'b', 2)
+----
+{"a":1,"b":2}
+
+# JSONB_TYPEOF.
+query T
+SELECT JSONB_TYPEOF(doc -> 'age') FROM j_t WHERE id = 1
+----
+number
+
+statement ok
+DROP TABLE j_t

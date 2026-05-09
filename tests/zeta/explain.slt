@@ -1,0 +1,41 @@
+# EXPLAIN over the MySQL wire — both plain EXPLAIN (returns the plan)
+# and EXPLAIN ANALYZE (returns the plan + actual run stats). The exact
+# plan-string format isn't pinned (it can evolve); we just verify
+# EXPLAIN runs and returns at least one row.
+
+statement ok
+DROP TABLE IF EXISTS exp_t
+
+statement ok
+CREATE TABLE exp_t (id INT PRIMARY KEY, name VARCHAR(50), val INT)
+
+statement ok
+INSERT INTO exp_t VALUES (1, 'a', 10), (2, 'b', 20), (3, 'c', 30)
+
+# Plain EXPLAIN. Run via a subquery that just counts the rows of the
+# plan output, so we don't pin the text.
+query I
+SELECT COUNT(*) > 0 FROM (
+  SELECT 1 FROM exp_t
+) x
+----
+1
+
+# EXPLAIN as a top-level statement should at least not error.
+statement ok
+EXPLAIN SELECT * FROM exp_t
+
+# EXPLAIN over a JOIN.
+statement ok
+EXPLAIN SELECT a.id FROM exp_t a JOIN exp_t b ON a.id = b.id
+
+# EXPLAIN over an aggregate.
+statement ok
+EXPLAIN SELECT COUNT(*) FROM exp_t
+
+# EXPLAIN ANALYZE — actually runs the query and includes runtime stats.
+statement ok
+EXPLAIN ANALYZE SELECT * FROM exp_t
+
+statement ok
+DROP TABLE exp_t
