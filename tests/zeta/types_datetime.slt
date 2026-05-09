@@ -1,0 +1,95 @@
+# Date/time types over the MySQL wire — DATE, TIMESTAMP, TIME, plus a
+# few common functions (CURRENT_DATE, EXTRACT, DATE_TRUNC). The shim
+# returns DATE/TIMESTAMP/TIME values via the MySQL date/time wire encoding;
+# the runner formats them back as strings for matching.
+#
+# Gaps not covered (intentional):
+#   - DATETIME as a distinct type (zeta uses TIMESTAMP for both).
+#   - YEAR(4) / YEAR(2) — MySQL-only.
+#   - Per-second sub-precision encoding (DATETIME(6) etc).
+
+statement ok
+DROP TABLE IF EXISTS t_dt
+
+statement ok
+CREATE TABLE t_dt (
+  id INT PRIMARY KEY,
+  d DATE,
+  ts TIMESTAMP,
+  t TIME
+)
+
+statement ok
+INSERT INTO t_dt VALUES
+  (1, DATE '2026-01-15', TIMESTAMP '2026-01-15 12:34:56', TIME '08:30:00'),
+  (2, DATE '2026-12-31', TIMESTAMP '2026-12-31 23:59:59', TIME '00:00:00')
+
+query ITTT rowsort
+SELECT id, d, ts, t FROM t_dt
+----
+1 2026-01-15 2026-01-15 12:34:56 08:30:00
+2 2026-12-31 2026-12-31 23:59:59 00:00:00
+
+# Date arithmetic via INTERVAL.
+query T
+SELECT DATE '2026-01-15' + INTERVAL '7 days'
+----
+2026-01-22 00:00:00
+
+# EXTRACT — pulling parts out of a date.
+query I
+SELECT EXTRACT(YEAR FROM DATE '2026-01-15')
+----
+2026
+
+query I
+SELECT EXTRACT(MONTH FROM DATE '2026-01-15')
+----
+1
+
+query I
+SELECT EXTRACT(DAY FROM DATE '2026-01-15')
+----
+15
+
+# EXTRACT on a TIMESTAMP — hour/minute/second.
+query I
+SELECT EXTRACT(HOUR FROM TIMESTAMP '2026-01-15 12:34:56')
+----
+12
+
+query I
+SELECT EXTRACT(MINUTE FROM TIMESTAMP '2026-01-15 12:34:56')
+----
+34
+
+# DATE_TRUNC — truncating a timestamp to a coarser unit.
+query T
+SELECT DATE_TRUNC('day', TIMESTAMP '2026-01-15 12:34:56')
+----
+2026-01-15 00:00:00
+
+query T
+SELECT DATE_TRUNC('month', TIMESTAMP '2026-01-15 12:34:56')
+----
+2026-01-01 00:00:00
+
+# WHERE on date columns.
+query I
+SELECT COUNT(*) FROM t_dt WHERE d >= DATE '2026-06-01'
+----
+1
+
+# MIN/MAX on dates.
+query T
+SELECT MIN(d) FROM t_dt
+----
+2026-01-15
+
+query T
+SELECT MAX(ts) FROM t_dt
+----
+2026-12-31 23:59:59
+
+statement ok
+DROP TABLE t_dt

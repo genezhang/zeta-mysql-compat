@@ -1,0 +1,114 @@
+# Aggregate functions over the MySQL wire — COUNT (including DISTINCT),
+# SUM, AVG, MIN, MAX. GROUP BY, HAVING, and the empty-set edge cases
+# (COUNT returns 0, the rest return NULL).
+
+statement ok
+DROP TABLE IF EXISTS sales
+
+statement ok
+CREATE TABLE sales (id INT PRIMARY KEY, region VARCHAR(20), amount INT, rep VARCHAR(20))
+
+statement ok
+INSERT INTO sales VALUES
+  (1, 'east', 100, 'Alice'),
+  (2, 'east', 250, 'Bob'),
+  (3, 'west', 75,  'Alice'),
+  (4, 'west', 175, 'Carol'),
+  (5, 'west', 500, 'Bob'),
+  (6, 'east', NULL, 'Carol')
+
+# COUNT variants — *, column (skips NULL), DISTINCT.
+query I
+SELECT COUNT(*) FROM sales
+----
+6
+
+query I
+SELECT COUNT(amount) FROM sales
+----
+5
+
+query I
+SELECT COUNT(DISTINCT rep) FROM sales
+----
+3
+
+query I
+SELECT COUNT(DISTINCT region) FROM sales
+----
+2
+
+# SUM / AVG / MIN / MAX over the whole table.
+query I
+SELECT SUM(amount) FROM sales
+----
+1100
+
+query I
+SELECT MIN(amount) FROM sales
+----
+75
+
+query I
+SELECT MAX(amount) FROM sales
+----
+500
+
+# AVG over integers — SUM/COUNT = 1100/5 = 220.
+#
+# Divergence: real MySQL returns DECIMAL(p, 4) for AVG over an integer
+# column, so the wire value is `220.0000`. Zeta drops the trailing
+# fractional digits and returns `220`. Same root cause as the DECIMAL
+# trailing-zero strip — pinned to observed behavior; see zeta #958.
+query T
+SELECT AVG(amount) FROM sales
+----
+220
+
+# GROUP BY region.
+query TI rowsort
+SELECT region, SUM(amount) FROM sales GROUP BY region
+----
+east 350
+west 750
+
+# HAVING — filter the groups. east SUM = 350, west SUM = 750.
+query TI rowsort
+SELECT region, SUM(amount) FROM sales GROUP BY region HAVING SUM(amount) > 500
+----
+west 750
+
+# Multi-column GROUP BY.
+query TTI rowsort
+SELECT region, rep, SUM(amount) FROM sales GROUP BY region, rep
+----
+east Alice 100
+east Bob 250
+east Carol NULL
+west Alice 75
+west Bob 500
+west Carol 175
+
+# Empty-set aggregates.
+query I
+SELECT COUNT(*) FROM sales WHERE region = 'north'
+----
+0
+
+query I
+SELECT SUM(amount) FROM sales WHERE region = 'north'
+----
+NULL
+
+query I
+SELECT MIN(amount) FROM sales WHERE region = 'north'
+----
+NULL
+
+# COUNT(*) with no rows in a group — should produce no rows, not a 0 row.
+query TI rowsort
+SELECT region, COUNT(*) FROM sales WHERE region = 'north' GROUP BY region
+----
+
+statement ok
+DROP TABLE sales

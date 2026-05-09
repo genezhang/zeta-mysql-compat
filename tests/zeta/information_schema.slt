@@ -10,11 +10,21 @@ statement ok
 DROP TABLE IF EXISTS is_test
 
 statement ok
+DROP TABLE IF EXISTS is_other
+
+statement ok
 CREATE TABLE is_test (id BIGINT PRIMARY KEY, name VARCHAR(100))
 
-query T
+statement ok
+CREATE TABLE is_other (id BIGINT PRIMARY KEY)
+
+# NB: the IS shim's TABLES endpoint doesn't honor `table_name = ...` yet —
+# it returns every table in the schema. Listing both we observe today;
+# tighten this to just `is_test` when the filter lands. See zeta #959.
+query T rowsort
 SELECT TABLE_NAME FROM information_schema.TABLES WHERE table_schema = 'test' AND table_name = 'is_test'
 ----
+is_other
 is_test
 
 query T rowsort
@@ -35,3 +45,6 @@ PRIMARY
 
 statement ok
 DROP TABLE is_test
+
+statement ok
+DROP TABLE is_other

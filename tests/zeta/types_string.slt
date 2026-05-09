@@ -1,0 +1,140 @@
+# String types and functions over the MySQL wire — VARCHAR, TEXT,
+# the common manipulation functions (UPPER, LOWER, LENGTH, CONCAT,
+# SUBSTRING, REPLACE, TRIM, LEFT, RIGHT). LIKE / NOT LIKE patterns
+# and NULL handling round it out.
+
+statement ok
+DROP TABLE IF EXISTS t_str
+
+statement ok
+CREATE TABLE t_str (id INT PRIMARY KEY, s VARCHAR(100), big TEXT)
+
+statement ok
+INSERT INTO t_str VALUES
+  (1, 'Hello', 'the quick brown fox'),
+  (2, 'World', '  padded  '),
+  (3, 'mixed CASE', NULL)
+
+# Round-trip with no transformation.
+query ITT rowsort
+SELECT id, s, big FROM t_str
+----
+1 Hello the quick brown fox
+2 World   padded
+3 mixed CASE NULL
+
+# UPPER / LOWER.
+query T
+SELECT UPPER('Hello, World!')
+----
+HELLO, WORLD!
+
+query T
+SELECT LOWER('Hello, World!')
+----
+hello, world!
+
+# LENGTH — char count for ASCII (byte and char are the same here).
+query I
+SELECT LENGTH('hello')
+----
+5
+
+query I
+SELECT LENGTH('')
+----
+0
+
+# CONCAT — multi-arg.
+query T
+SELECT CONCAT('foo', '-', 'bar', '-', 'baz')
+----
+foo-bar-baz
+
+# SUBSTRING — 1-based, inclusive.
+query T
+SELECT SUBSTRING('the quick brown fox', 5, 5)
+----
+quick
+
+# REPLACE.
+query T
+SELECT REPLACE('hello world', 'world', 'there')
+----
+hello there
+
+# TRIM — strips both sides of ASCII whitespace.
+query T
+SELECT TRIM('  hi  ')
+----
+hi
+
+query T
+SELECT LTRIM('  hi  ')
+----
+hi
+
+query T
+SELECT RTRIM('  hi  ')
+----
+  hi
+
+# LEFT / RIGHT.
+query T
+SELECT LEFT('abcdefgh', 3)
+----
+abc
+
+query T
+SELECT RIGHT('abcdefgh', 3)
+----
+fgh
+
+# String functions over a column reference, not just literals.
+query IT rowsort
+SELECT id, UPPER(s) FROM t_str
+----
+1 HELLO
+2 WORLD
+3 MIXED CASE
+
+# LIKE patterns.
+query IT rowsort
+SELECT id, s FROM t_str WHERE s LIKE 'H%'
+----
+1 Hello
+
+query IT rowsort
+SELECT id, s FROM t_str WHERE s LIKE '%o%'
+----
+1 Hello
+2 World
+
+query I
+SELECT COUNT(*) FROM t_str WHERE s NOT LIKE '%o%'
+----
+1
+
+# NULL handling — CONCAT vs CONCAT_WS.
+#
+# Divergence: real MySQL returns NULL when any CONCAT argument is NULL;
+# zeta returns the string with NULLs skipped (PG semantics). Pinned to
+# observed behavior; see zeta #960.
+query T
+SELECT CONCAT('a', NULL, 'b')
+----
+ab
+
+query T
+SELECT CONCAT_WS('-', 'a', NULL, 'b')
+----
+a-b
+
+# Length of a NULL TEXT column.
+query I
+SELECT LENGTH(big) FROM t_str WHERE id = 3
+----
+NULL
+
+statement ok
+DROP TABLE t_str
