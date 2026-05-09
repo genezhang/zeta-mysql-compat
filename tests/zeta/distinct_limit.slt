@@ -1,0 +1,95 @@
+# DISTINCT and LIMIT/OFFSET over the MySQL wire — the common pagination
+# and de-duplication shapes.
+
+statement ok
+DROP TABLE IF EXISTS dl_t
+
+statement ok
+CREATE TABLE dl_t (id INT PRIMARY KEY, category VARCHAR(20), val INT)
+
+statement ok
+INSERT INTO dl_t VALUES
+  (1, 'a', 100),
+  (2, 'b', 200),
+  (3, 'a', 100),
+  (4, 'c', 300),
+  (5, 'b', 200),
+  (6, 'a', 150)
+
+# DISTINCT — single column.
+query T rowsort
+SELECT DISTINCT category FROM dl_t
+----
+a
+b
+c
+
+# DISTINCT — multi-column. (a,100) appears twice in raw data, once here.
+query TI rowsort
+SELECT DISTINCT category, val FROM dl_t
+----
+a 100
+a 150
+b 200
+c 300
+
+# COUNT DISTINCT.
+query I
+SELECT COUNT(DISTINCT category) FROM dl_t
+----
+3
+
+# COUNT(DISTINCT a, b) silently undercounts — only the first arg is
+# considered for distinctness. Real value is 4; zeta returns 3. See
+# zeta #967. Pinned to observed.
+query I
+SELECT COUNT(DISTINCT category, val) FROM dl_t
+----
+3
+
+# LIMIT alone — first N rows by some order.
+query I
+SELECT id FROM dl_t ORDER BY id LIMIT 3
+----
+1
+2
+3
+
+# LIMIT with OFFSET — pagination.
+query I
+SELECT id FROM dl_t ORDER BY id LIMIT 2 OFFSET 2
+----
+3
+4
+
+# MySQL-style LIMIT offset, count (comma syntax). Currently rejected by
+# the parser — see zeta #968. Pinned as statement-error so a future fix
+# lands as a noisy diff.
+statement error
+SELECT id FROM dl_t ORDER BY id LIMIT 2, 2
+
+# LIMIT 0 — empty result.
+query I
+SELECT id FROM dl_t LIMIT 0
+----
+
+# LIMIT bigger than result set.
+query I
+SELECT id FROM dl_t ORDER BY id LIMIT 100
+----
+1
+2
+3
+4
+5
+6
+
+# DISTINCT + ORDER BY + LIMIT — common "top N unique" shape.
+query T
+SELECT DISTINCT category FROM dl_t ORDER BY category LIMIT 2
+----
+a
+b
+
+statement ok
+DROP TABLE dl_t

@@ -1,0 +1,79 @@
+# Set operations over the MySQL wire — UNION, UNION ALL, INTERSECT,
+# EXCEPT. MySQL has UNION and UNION ALL natively; INTERSECT and EXCEPT
+# are MySQL 8.0.31+ features. Pinning what zeta accepts.
+
+statement ok
+DROP TABLE IF EXISTS s_a
+
+statement ok
+DROP TABLE IF EXISTS s_b
+
+statement ok
+CREATE TABLE s_a (id INT PRIMARY KEY, val INT)
+
+statement ok
+CREATE TABLE s_b (id INT PRIMARY KEY, val INT)
+
+statement ok
+INSERT INTO s_a VALUES (1, 10), (2, 20), (3, 30)
+
+statement ok
+INSERT INTO s_b VALUES (3, 30), (4, 40), (5, 50)
+
+# UNION — distinct rows from both.
+query II rowsort
+SELECT id, val FROM s_a UNION SELECT id, val FROM s_b
+----
+1 10
+2 20
+3 30
+4 40
+5 50
+
+# UNION ALL — keeps duplicates; row (3, 30) appears twice.
+query II rowsort
+SELECT id, val FROM s_a UNION ALL SELECT id, val FROM s_b
+----
+1 10
+2 20
+3 30
+3 30
+4 40
+5 50
+
+# INTERSECT — rows present in both.
+query II rowsort
+SELECT id, val FROM s_a INTERSECT SELECT id, val FROM s_b
+----
+3 30
+
+# EXCEPT — rows in left but not right.
+query II rowsort
+SELECT id, val FROM s_a EXCEPT SELECT id, val FROM s_b
+----
+1 10
+2 20
+
+# UNION with literal SELECTs — no FROM table.
+query I rowsort
+SELECT 1 UNION SELECT 2 UNION SELECT 3
+----
+1
+2
+3
+
+# Set ops with ORDER BY at the end.
+query II
+SELECT id, val FROM s_a UNION SELECT id, val FROM s_b ORDER BY id
+----
+1 10
+2 20
+3 30
+4 40
+5 50
+
+statement ok
+DROP TABLE s_a
+
+statement ok
+DROP TABLE s_b

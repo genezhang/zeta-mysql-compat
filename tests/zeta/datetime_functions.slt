@@ -1,0 +1,67 @@
+# Date/time functions over the MySQL wire.
+#
+# Gaps tracked (all #966):
+#   - DATE_ADD / DATE_SUB are unrecognized — migration-blocking.
+#   - DATEDIFF is unrecognized — migration-blocking.
+# This file uses the PG `+ INTERVAL` form for arithmetic, which works.
+# Restore the DATE_ADD / DATE_SUB / DATEDIFF blocks when #966 lands.
+
+# CURRENT_DATE / CURRENT_TIMESTAMP / NOW return values — we can't pin
+# their values, but can pin their types and that they return non-NULL.
+query I
+SELECT CASE WHEN CURRENT_DATE IS NULL THEN 0 ELSE 1 END
+----
+1
+
+query I
+SELECT CASE WHEN NOW() IS NULL THEN 0 ELSE 1 END
+----
+1
+
+# Adding INTERVAL with the + operator (PG-style, also accepted by MySQL).
+# DATE_ADD / DATE_SUB MySQL spellings are unrecognized — see #966.
+query T
+SELECT DATE '2026-01-15' + INTERVAL '1 month'
+----
+2026-02-15 00:00:00
+
+query T
+SELECT TIMESTAMP '2026-01-15 12:00:00' + INTERVAL '90 minutes'
+----
+2026-01-15 13:30:00
+
+# DATEDIFF intentionally omitted — see #966.
+
+# EXTRACT — already covered in types_datetime, repeated for completeness.
+query I
+SELECT EXTRACT(DOW FROM DATE '2026-01-15')
+----
+4
+
+# DATE_TRUNC.
+query T
+SELECT DATE_TRUNC('hour', TIMESTAMP '2026-01-15 12:34:56')
+----
+2026-01-15 12:00:00
+
+query T
+SELECT DATE_TRUNC('year', TIMESTAMP '2026-01-15 12:34:56')
+----
+2026-01-01 00:00:00
+
+# TO_CHAR — PG-style date formatting (MySQL has DATE_FORMAT instead).
+query T
+SELECT TO_CHAR(DATE '2026-01-15', 'YYYY-MM-DD')
+----
+2026-01-15
+
+# Casting — DATE / TIMESTAMP literal parses.
+query T
+SELECT CAST('2026-01-15' AS DATE)
+----
+2026-01-15
+
+query T
+SELECT CAST('2026-01-15 12:34:56' AS TIMESTAMP)
+----
+2026-01-15 12:34:56
