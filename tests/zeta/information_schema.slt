@@ -23,14 +23,10 @@ SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE table_schema = 'test' A
 id
 name
 
-# NB: zeta's IS shim doesn't filter SCHEMATA by the WHERE clause yet —
-# it returns every catalog database. Listing both we expect to see for
-# now; tighten when the shim honors `WHERE SCHEMA_NAME = ...`.
-query T rowsort
+query T
 SELECT SCHEMA_NAME FROM information_schema.SCHEMATA WHERE SCHEMA_NAME = 'test'
 ----
 test
-zeta
 
 query T
 SELECT INDEX_NAME FROM information_schema.STATISTICS WHERE table_schema = 'test' AND table_name = 'is_test'
