@@ -1,0 +1,92 @@
+# JOIN coverage over the MySQL wire — INNER, LEFT, RIGHT, multi-key,
+# and self-join. Two-table fixture with one orphan on each side so each
+# join flavor produces a different row count.
+
+statement ok
+DROP TABLE IF EXISTS orders
+
+statement ok
+DROP TABLE IF EXISTS customers
+
+statement ok
+CREATE TABLE customers (id INT PRIMARY KEY, name VARCHAR(50))
+
+statement ok
+CREATE TABLE orders (id INT PRIMARY KEY, customer_id INT, amount INT)
+
+statement ok
+INSERT INTO customers VALUES (1, 'Alice'), (2, 'Bob'), (3, 'Carol')
+
+# Order 100 → customer 1, order 101 → customer 2, order 102 → customer 99
+# (orphan, no matching customer). Customer 3 has no orders.
+statement ok
+INSERT INTO orders VALUES (100, 1, 50), (101, 2, 75), (102, 99, 10)
+
+# INNER JOIN — only matched pairs.
+query ITI rowsort
+SELECT c.id, c.name, o.amount
+FROM customers c JOIN orders o ON o.customer_id = c.id
+----
+1 Alice 50
+2 Bob 75
+
+# LEFT JOIN — every customer, NULL where no order.
+query ITI rowsort
+SELECT c.id, c.name, o.amount
+FROM customers c LEFT JOIN orders o ON o.customer_id = c.id
+----
+1 Alice 50
+2 Bob 75
+3 Carol NULL
+
+# RIGHT JOIN — every order, NULL where no customer.
+query ITI rowsort
+SELECT c.id, c.name, o.amount
+FROM customers c RIGHT JOIN orders o ON o.customer_id = c.id
+----
+1 Alice 50
+2 Bob 75
+NULL NULL 10
+
+# WHERE on the joined rows — should match customers with orders only.
+query T rowsort
+SELECT c.name
+FROM customers c JOIN orders o ON o.customer_id = c.id
+WHERE o.amount >= 50
+----
+Alice
+Bob
+
+# Aggregation across a join.
+query TI rowsort
+SELECT c.name, SUM(o.amount)
+FROM customers c LEFT JOIN orders o ON o.customer_id = c.id
+GROUP BY c.name
+----
+Alice 50
+Bob 75
+Carol NULL
+
+# Multi-key join: pair customers with orders sharing both id and customer_id.
+# (Contrived, but exercises composite ON.)
+query ITI
+SELECT c.id, c.name, o.id
+FROM customers c JOIN orders o ON o.customer_id = c.id AND o.id > 100
+ORDER BY c.id
+----
+2 Bob 101
+
+# Self-join — pair customers with themselves where ids differ.
+query ITT rowsort
+SELECT c1.id, c1.name, c2.name
+FROM customers c1 JOIN customers c2 ON c1.id < c2.id
+----
+1 Alice Bob
+1 Alice Carol
+2 Bob Carol
+
+statement ok
+DROP TABLE orders
+
+statement ok
+DROP TABLE customers

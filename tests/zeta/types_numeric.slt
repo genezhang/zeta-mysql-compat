@@ -1,0 +1,92 @@
+# Numeric types over the MySQL wire — SMALLINT/INT/BIGINT/DECIMAL plus
+# integer arithmetic semantics. Pins down a few subtle differences:
+#   - Integer / integer = integer (PG semantics, not MySQL's DECIMAL).
+#   - NULL propagates through arithmetic.
+#   - DECIMAL preserves declared scale.
+#
+# Gaps not covered (intentional, until the shim grows them):
+#   - bare TINYINT / MEDIUMINT (the shim only rewrites them inside
+#     AUTO_INCREMENT, so a bare `TINYINT` column raises 1064).
+#   - INT UNSIGNED with values > 2^31-1 (UNSIGNED is silently stripped,
+#     so the value won't fit the signed type).
+#   - DECIMAL trailing-zero preservation (the wire serializer drops
+#     trailing zeros, so DECIMAL(10,2) value `12.30` round-trips as
+#     `12.3`); fixtures avoid trailing zeros in the last decimal place.
+
+statement ok
+DROP TABLE IF EXISTS t_num
+
+statement ok
+CREATE TABLE t_num (
+  id INT PRIMARY KEY,
+  i16 SMALLINT,
+  i32 INT,
+  i64 BIGINT,
+  d DECIMAL(10, 2)
+)
+
+statement ok
+INSERT INTO t_num VALUES (1, 123, 12345, 1234567890123, 12.34)
+
+statement ok
+INSERT INTO t_num VALUES (2, -123, -12345, -1234567890123, -0.55)
+
+query IIIIT rowsort
+SELECT id, i16, i32, i64, d FROM t_num
+----
+1 123 12345 1234567890123 12.34
+2 -123 -12345 -1234567890123 -0.55
+
+# Integer arithmetic — zeta uses PG semantics (integer / integer = integer).
+# We pin this so a future change to MySQL-style `/` returning DECIMAL would
+# fail loudly here rather than silently in user apps.
+query I
+SELECT 7 / 2
+----
+3
+
+query I
+SELECT 7 % 2
+----
+1
+
+# DECIMAL arithmetic preserves scale.
+query T
+SELECT CAST(1.5 AS DECIMAL(10, 2)) + CAST(2.25 AS DECIMAL(10, 2))
+----
+3.75
+
+# Aggregates over numeric columns.
+query I
+SELECT SUM(i32) FROM t_num
+----
+0
+
+query I
+SELECT MIN(i64) FROM t_num
+----
+-1234567890123
+
+query I
+SELECT MAX(i64) FROM t_num
+----
+1234567890123
+
+query I
+SELECT COUNT(*) FROM t_num WHERE i32 > 0
+----
+1
+
+# NULL propagation in arithmetic.
+query I
+SELECT 1 + NULL
+----
+NULL
+
+query I
+SELECT NULL * 100
+----
+NULL
+
+statement ok
+DROP TABLE t_num
