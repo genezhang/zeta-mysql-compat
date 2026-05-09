@@ -1,10 +1,8 @@
 # SAVEPOINT / ROLLBACK TO SAVEPOINT / RELEASE SAVEPOINT over the MySQL
-# wire. These all sit on top of the multi-statement transaction
-# machinery that's currently a no-op (see #961 — every statement
-# auto-commits). So savepoints are also no-ops by transitivity.
-#
-# This file documents that and pins the observed behavior. Once #961
-# lands, this file becomes the meaningful test for savepoint semantics.
+# wire. These ride on top of the multi-statement txn machinery added by
+# zeta #961; SAVEPOINT delegates to `Transaction::savepoint` (write-buffer
+# snapshots), so ROLLBACK TO SAVEPOINT actually undoes writes made after
+# the savepoint.
 
 statement ok
 DROP TABLE IF EXISTS sp_t
@@ -27,12 +25,7 @@ SAVEPOINT sp1
 statement ok
 INSERT INTO sp_t VALUES (3, 'after-sp')
 
-statement ok
-ROLLBACK TO SAVEPOINT sp1
-
-# Real semantics: row 3 should be gone, row 2 should remain. Currently
-# the entire enclosing transaction is auto-committed, so the savepoint
-# can't undo anything. Both rows survive.
+# Pre-rollback: txn sees its own writes (rows 1,2,3).
 query IT rowsort
 SELECT id, name FROM sp_t
 ----
@@ -41,10 +34,27 @@ SELECT id, name FROM sp_t
 3 after-sp
 
 statement ok
+ROLLBACK TO SAVEPOINT sp1
+
+# Row 3 (inserted after sp1) is gone; row 2 (before sp1) survives.
+query IT rowsort
+SELECT id, name FROM sp_t
+----
+1 pre
+2 before-sp
+
+statement ok
 RELEASE SAVEPOINT sp1
 
 statement ok
 COMMIT
+
+# After commit: rows 1 and 2 are durable.
+query IT rowsort
+SELECT id, name FROM sp_t
+----
+1 pre
+2 before-sp
 
 statement ok
 DROP TABLE sp_t

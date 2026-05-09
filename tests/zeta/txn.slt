@@ -1,11 +1,10 @@
-# Transactions over the MySQL wire — currently a major gap. See zeta #961.
+# Multi-statement transactions over the MySQL wire — fixed in zeta #961.
 #
-# The MySQL shim doesn't have per-session txn state, so BEGIN /
-# START TRANSACTION / COMMIT / ROLLBACK are effectively no-ops: every
-# statement auto-commits. This file is pinned to that observed behavior;
-# once #961 lands, tighten the assertions to real transactional semantics
-# (ROLLBACK should undo writes, in-txn reads should see only the txn's
-# own writes, etc.).
+# Before the fix every statement auto-committed; ROLLBACK was a no-op.
+# Now BEGIN / START TRANSACTION / COMMIT / ROLLBACK go through real
+# per-session txn state in the MySQL shim, mirroring the PG wire.
+# SAVEPOINT / RELEASE / ROLLBACK TO SAVEPOINT are routed through the
+# txn's write-buffer snapshot API (see savepoints.slt).
 
 statement ok
 DROP TABLE IF EXISTS txn_t
@@ -22,13 +21,14 @@ SELECT id, name FROM txn_t
 ----
 1 pre-commit
 
-# COMMIT path — accepted, but the prior INSERT was already auto-committed.
+# COMMIT path — writes inside BEGIN/COMMIT are durable.
 statement ok
 BEGIN
 
 statement ok
 INSERT INTO txn_t VALUES (2, 'committed')
 
+# In-txn read sees the txn's own writes.
 query IT rowsort
 SELECT id, name FROM txn_t
 ----
@@ -44,8 +44,7 @@ SELECT id, name FROM txn_t
 1 pre-commit
 2 committed
 
-# ROLLBACK path — should undo writes, but currently does not (#961).
-# This block documents the broken behavior so a fix lands as a noisy diff.
+# ROLLBACK path — undoes writes made inside the txn.
 statement ok
 BEGIN
 
@@ -55,11 +54,7 @@ INSERT INTO txn_t VALUES (3, 'rolled-back')
 statement ok
 UPDATE txn_t SET name = 'modified' WHERE id = 1
 
-statement ok
-ROLLBACK
-
-# Real MySQL would show only the original 2 rows here; zeta retains
-# the writes from the failed/rolled-back txn. Pinned to observed.
+# In-txn read sees the txn's tentative writes.
 query IT rowsort
 SELECT id, name FROM txn_t
 ----
@@ -67,7 +62,17 @@ SELECT id, name FROM txn_t
 2 committed
 3 rolled-back
 
-# START TRANSACTION accepted as a synonym for BEGIN (also a no-op currently).
+statement ok
+ROLLBACK
+
+# Post-rollback: only the originally-committed rows survive.
+query IT rowsort
+SELECT id, name FROM txn_t
+----
+1 pre-commit
+2 committed
+
+# START TRANSACTION is a synonym for BEGIN.
 statement ok
 START TRANSACTION
 
@@ -80,10 +85,17 @@ COMMIT
 query IT rowsort
 SELECT id, name FROM txn_t
 ----
-1 modified
+1 pre-commit
 2 committed
-3 rolled-back
 4 st-tx
+
+# Stray COMMIT / ROLLBACK outside a txn are accepted as no-ops (matches
+# real MySQL — the server warns but does not error).
+statement ok
+COMMIT
+
+statement ok
+ROLLBACK
 
 statement ok
 DROP TABLE txn_t
