@@ -1,0 +1,119 @@
+# Window functions over the MySQL wire — ROW_NUMBER, RANK, DENSE_RANK,
+# LAG, LEAD, SUM OVER, plus PARTITION BY / ORDER BY in the OVER clause.
+
+statement ok
+DROP TABLE IF EXISTS sales_w
+
+statement ok
+CREATE TABLE sales_w (id INT PRIMARY KEY, region VARCHAR(20), rep VARCHAR(20), amount INT)
+
+statement ok
+INSERT INTO sales_w VALUES
+  (1, 'east', 'Alice', 100),
+  (2, 'east', 'Bob',   250),
+  (3, 'east', 'Bob',   250),
+  (4, 'west', 'Alice', 75),
+  (5, 'west', 'Carol', 175),
+  (6, 'west', 'Bob',   500)
+
+# ROW_NUMBER over the whole table, ordered by amount asc.
+query II
+SELECT id, ROW_NUMBER() OVER (ORDER BY amount, id) FROM sales_w
+ORDER BY id
+----
+1 2
+2 4
+3 5
+4 1
+5 3
+6 6
+
+# RANK with ties — rows 2 and 3 share amount=250 → both get rank 4.
+query II
+SELECT id, RANK() OVER (ORDER BY amount, region, rep) FROM sales_w
+ORDER BY id
+----
+1 2
+2 4
+3 4
+4 1
+5 3
+6 6
+
+# DENSE_RANK — ties don't leave a gap.
+query II
+SELECT id, DENSE_RANK() OVER (ORDER BY amount) FROM sales_w
+ORDER BY id
+----
+1 2
+2 4
+3 4
+4 1
+5 3
+6 5
+
+# PARTITION BY region — ROW_NUMBER restarts at 1 per partition.
+query TII
+SELECT region, id, ROW_NUMBER() OVER (PARTITION BY region ORDER BY amount, id)
+FROM sales_w
+ORDER BY region, id
+----
+east 1 1
+east 2 2
+east 3 3
+west 4 1
+west 5 2
+west 6 3
+
+# SUM OVER — running total per region, ordered by amount.
+query TII
+SELECT region, id, SUM(amount) OVER (PARTITION BY region ORDER BY amount, id)
+FROM sales_w
+ORDER BY region, id
+----
+east 1 100
+east 2 350
+east 3 600
+west 4 75
+west 5 250
+west 6 750
+
+# LAG — previous row's amount within the partition; NULL on the first row.
+query II
+SELECT id, LAG(amount) OVER (PARTITION BY region ORDER BY amount, id)
+FROM sales_w
+ORDER BY id
+----
+1 NULL
+2 100
+3 250
+4 NULL
+5 75
+6 175
+
+# LEAD — next row's amount within the partition; NULL on the last row.
+query II
+SELECT id, LEAD(amount) OVER (PARTITION BY region ORDER BY amount, id)
+FROM sales_w
+ORDER BY id
+----
+1 250
+2 250
+3 NULL
+4 175
+5 500
+6 NULL
+
+# Window aggregate with no PARTITION/ORDER — overall total per row.
+query II
+SELECT id, SUM(amount) OVER () FROM sales_w ORDER BY id
+----
+1 1350
+2 1350
+3 1350
+4 1350
+5 1350
+6 1350
+
+statement ok
+DROP TABLE sales_w

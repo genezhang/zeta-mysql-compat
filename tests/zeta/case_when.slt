@@ -1,0 +1,97 @@
+# CASE expressions over the MySQL wire — searched form, simple form,
+# nested CASE, CASE in aggregate / ORDER BY contexts.
+#
+# GROUP BY CASE with column references is currently broken on the
+# row-store executor (see zeta #962). The GROUP BY CASE block from an
+# earlier draft of this file is omitted here; restore it when #962 lands.
+#
+# ORDER BY <CASE expr> is also silently ignored (#965). The ORDER BY
+# CASE block below is pinned to observed (wrong) order.
+
+statement ok
+DROP TABLE IF EXISTS t_case
+
+statement ok
+CREATE TABLE t_case (id INT PRIMARY KEY, score INT, category VARCHAR(20))
+
+statement ok
+INSERT INTO t_case VALUES
+  (1, 95, 'A'),
+  (2, 75, 'B'),
+  (3, 50, 'C'),
+  (4, NULL, 'D'),
+  (5, 100, 'A')
+
+# Searched CASE — score-band bucketing.
+query IT rowsort
+SELECT id, CASE
+  WHEN score >= 90 THEN 'high'
+  WHEN score >= 70 THEN 'mid'
+  WHEN score IS NOT NULL THEN 'low'
+  ELSE 'unknown'
+END FROM t_case
+----
+1 high
+2 mid
+3 low
+4 unknown
+5 high
+
+# Simple CASE — equality match against a switch value.
+query IT rowsort
+SELECT id, CASE category
+  WHEN 'A' THEN 'best'
+  WHEN 'B' THEN 'good'
+  WHEN 'C' THEN 'okay'
+  ELSE 'other'
+END FROM t_case
+----
+1 best
+2 good
+3 okay
+4 other
+5 best
+
+# CASE without ELSE — produces NULL for unmatched rows.
+query IT rowsort
+SELECT id, CASE WHEN score >= 90 THEN 'high' END FROM t_case
+----
+1 high
+2 NULL
+3 NULL
+4 NULL
+5 high
+
+# Nested CASE.
+query IT rowsort
+SELECT id, CASE
+  WHEN score IS NULL THEN 'missing'
+  ELSE CASE WHEN score >= 90 THEN 'high' ELSE 'not-high' END
+END FROM t_case
+----
+1 high
+2 not-high
+3 not-high
+4 missing
+5 high
+
+# CASE inside SUM — count high scores.
+query I
+SELECT SUM(CASE WHEN score >= 90 THEN 1 ELSE 0 END) FROM t_case
+----
+2
+
+# CASE in ORDER BY — should sort NULLs last; zeta silently drops the
+# CASE term and orders by id only. Pinned to observed; see zeta #965.
+query II
+SELECT id, score FROM t_case
+ORDER BY CASE WHEN score IS NULL THEN 1 ELSE 0 END, id
+----
+1 95
+2 75
+3 50
+4 NULL
+5 100
+
+statement ok
+DROP TABLE t_case

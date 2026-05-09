@@ -1,0 +1,74 @@
+# ALTER TABLE over the MySQL wire — ADD COLUMN, DROP COLUMN, RENAME COLUMN,
+# plus the MySQL-specific spellings CHANGE COLUMN and MODIFY COLUMN. The
+# shim will need to translate the MySQL forms to PG syntax; this file
+# pins which translations work.
+#
+# Gaps tracked:
+#   - ADD COLUMN ... DEFAULT does NOT backfill existing rows (#963).
+#   - CHANGE COLUMN / MODIFY COLUMN are rejected by the parser (#964).
+# Both are pinned to observed behavior.
+
+statement ok
+DROP TABLE IF EXISTS t_alter
+
+statement ok
+CREATE TABLE t_alter (id INT PRIMARY KEY, name VARCHAR(50))
+
+statement ok
+INSERT INTO t_alter VALUES (1, 'alpha'), (2, 'beta')
+
+# ADD COLUMN with a default. Real MySQL/PG backfill TRUE for existing rows;
+# zeta leaves them NULL. Pinned to observed; see zeta #963.
+statement ok
+ALTER TABLE t_alter ADD COLUMN active BOOLEAN DEFAULT TRUE
+
+query IT rowsort
+SELECT id, active FROM t_alter
+----
+1 NULL
+2 NULL
+
+# But NEW inserts after the ALTER do get the default.
+statement ok
+INSERT INTO t_alter VALUES (3, 'gamma')
+
+query I
+SELECT active FROM t_alter WHERE id = 3
+----
+1
+
+# ADD COLUMN nullable, no default.
+statement ok
+ALTER TABLE t_alter ADD COLUMN note VARCHAR(100)
+
+query I
+SELECT COUNT(*) FROM t_alter WHERE note IS NULL
+----
+3
+
+# DROP COLUMN.
+statement ok
+ALTER TABLE t_alter DROP COLUMN note
+
+# RENAME COLUMN — PG-style spelling.
+statement ok
+ALTER TABLE t_alter RENAME COLUMN active TO is_active
+
+query II rowsort
+SELECT id, is_active FROM t_alter
+----
+1 NULL
+2 NULL
+3 1
+
+# MySQL-specific: CHANGE COLUMN. Currently rejected by the parser (#964).
+# Pinned as a statement-error so a future fix lands as a noisy diff.
+statement error
+ALTER TABLE t_alter CHANGE COLUMN is_active enabled SMALLINT
+
+# MySQL-specific: MODIFY COLUMN. Also rejected (#964).
+statement error
+ALTER TABLE t_alter MODIFY COLUMN is_active INT
+
+statement ok
+DROP TABLE t_alter
