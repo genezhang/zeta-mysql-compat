@@ -55,15 +55,19 @@ SELECT id, name FROM descendants ORDER BY id
 3 b
 4 a-leaf
 
-# CTE referenced from a scalar subquery — currently rejected (#975).
-statement error
+# CTE referenced from a scalar subquery — fixed in Zeta (was #975).
+query I
 WITH a AS (SELECT id FROM cte_t WHERE parent_id IS NULL)
 SELECT (SELECT COUNT(*) FROM a)
+----
+1
 
-# CTE referenced from a derived table — currently rejected (#975).
-statement error
+# CTE referenced from a derived table — fixed in Zeta (was #975).
+query I
 WITH a AS (SELECT id FROM cte_t)
 SELECT COUNT(*) FROM (SELECT * FROM a) x
+----
+4
 
 statement ok
 DROP TABLE cte_t

@@ -69,16 +69,23 @@ SELECT RPAD('7', 3, '0')
 ----
 700
 
-# MySQL-specific functions currently rejected — see #970. Pinned as
-# statement-error so a future fix is a noisy diff.
-statement error
+# MySQL-specific functions — all now implemented in Zeta.
+query T
 SELECT SUBSTRING_INDEX('foo.bar.baz', '.', 2)
+----
+foo.bar
 
-statement error
+query I
 SELECT INSTR('the quick brown fox', 'brown')
+----
+11
 
-statement error
+query I
 SELECT LOCATE('brown', 'the quick brown fox')
+----
+11
 
-statement error
+query T
 SELECT FORMAT(1234567.891, 2)
+----
+1,234,567.89
