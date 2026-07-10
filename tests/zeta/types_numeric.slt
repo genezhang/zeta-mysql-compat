@@ -37,13 +37,13 @@ SELECT id, i16, i32, i64, d FROM t_num
 1 123 12345 1234567890123 12.34
 2 -123 -12345 -1234567890123 -0.55
 
-# Integer arithmetic — zeta uses PG semantics (integer / integer = integer).
-# We pin this so a future change to MySQL-style `/` returning DECIMAL would
-# fail loudly here rather than silently in user apps.
-query I
+# Integer arithmetic — MySQL `/` on integer operands yields DECIMAL quotient
+# (7/2 = 3.5), unlike PG which truncates to integer (3). Resolved at eval
+# site via `mysql_decimal_division()` based on wire protocol.
+query T
 SELECT 7 / 2
 ----
-3
+3.50
 
 query I
 SELECT 7 % 2

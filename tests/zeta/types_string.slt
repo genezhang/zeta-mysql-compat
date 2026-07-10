@@ -117,13 +117,12 @@ SELECT COUNT(*) FROM t_str WHERE s NOT LIKE '%o%'
 
 # NULL handling — CONCAT vs CONCAT_WS.
 #
-# Divergence: real MySQL returns NULL when any CONCAT argument is NULL;
-# zeta returns the string with NULLs skipped (PG semantics). Pinned to
-# observed behavior; see zeta #960.
+# MySQL CONCAT propagates NULL: any NULL argument makes the whole result NULL.
+# The MySQL wire shim rewrites CONCAT() to MYSQL_CONCAT to enforce this.
 query T
 SELECT CONCAT('a', NULL, 'b')
 ----
-ab
+NULL
 
 query T
 SELECT CONCAT_WS('-', 'a', NULL, 'b')
