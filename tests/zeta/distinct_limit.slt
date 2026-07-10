@@ -39,13 +39,11 @@ SELECT COUNT(DISTINCT category) FROM dl_t
 ----
 3
 
-# COUNT(DISTINCT a, b) silently undercounts — only the first arg is
-# considered for distinctness. Real value is 4; zeta returns 3. See
-# zeta #967. Pinned to observed.
+# COUNT(DISTINCT a, b) — correct multi-column distinct count.
 query I
 SELECT COUNT(DISTINCT category, val) FROM dl_t
 ----
-3
+4
 
 # LIMIT alone — first N rows by some order.
 query I
@@ -62,11 +60,12 @@ SELECT id FROM dl_t ORDER BY id LIMIT 2 OFFSET 2
 3
 4
 
-# MySQL-style LIMIT offset, count (comma syntax). Currently rejected by
-# the parser — see zeta #968. Pinned as statement-error so a future fix
-# lands as a noisy diff.
-statement error
+# MySQL-style LIMIT offset, count (comma syntax). Now supported (fixed #968).
+query I
 SELECT id FROM dl_t ORDER BY id LIMIT 2, 2
+----
+3
+4
 
 # LIMIT 0 — empty result.
 query I

@@ -23,11 +23,12 @@ Alice
 Bob
 Carol
 
-# `->` returns JSONB (as a string in result here).
+# `->` returns JSONB (as a string in result here). MySQL JSON format uses
+# space after comma.
 query T
 SELECT (doc -> 'tags') FROM j_t WHERE id = 1
 ----
-["a","b"]
+["a", "b"]
 
 # Nested extraction.
 query T
@@ -47,11 +48,11 @@ SELECT COUNT(*) FROM j_t WHERE doc ? 'tags'
 ----
 2
 
-# JSONB_BUILD_OBJECT.
+# JSONB_BUILD_OBJECT — MySQL JSON format uses spaces.
 query T
 SELECT JSONB_BUILD_OBJECT('a', 1, 'b', 2)
 ----
-{"a":1,"b":2}
+{"a": 1, "b": 2}
 
 # JSONB_TYPEOF.
 query T

@@ -17,16 +17,16 @@ CREATE TABLE t_alter (id INT PRIMARY KEY, name VARCHAR(50))
 statement ok
 INSERT INTO t_alter VALUES (1, 'alpha'), (2, 'beta')
 
-# ADD COLUMN with a default. Real MySQL/PG backfill TRUE for existing rows;
-# zeta leaves them NULL. Pinned to observed; see zeta #963.
+# ADD COLUMN with a default. Real MySQL backfills TRUE for existing rows;
+# zeta now does the same (fixed from #963).
 statement ok
 ALTER TABLE t_alter ADD COLUMN active BOOLEAN DEFAULT TRUE
 
 query IT rowsort
 SELECT id, active FROM t_alter
 ----
-1 NULL
-2 NULL
+1 1
+2 1
 
 # But NEW inserts after the ALTER do get the default.
 statement ok
@@ -57,18 +57,18 @@ ALTER TABLE t_alter RENAME COLUMN active TO is_active
 query II rowsort
 SELECT id, is_active FROM t_alter
 ----
-1 NULL
-2 NULL
+1 1
+2 1
 3 1
 
-# MySQL-specific: CHANGE COLUMN. Currently rejected by the parser (#964).
-# Pinned as a statement-error so a future fix lands as a noisy diff.
-statement error
+# MySQL-specific: CHANGE COLUMN. Now supported (fixed #964).
+statement ok
 ALTER TABLE t_alter CHANGE COLUMN is_active enabled SMALLINT
 
-# MySQL-specific: MODIFY COLUMN. Also rejected (#964).
-statement error
-ALTER TABLE t_alter MODIFY COLUMN is_active INT
+# MySQL-specific: MODIFY COLUMN. Now supported (fixed #964).
+# Column was renamed to `enabled` by CHANGE above.
+statement ok
+ALTER TABLE t_alter MODIFY COLUMN enabled INT
 
 statement ok
 DROP TABLE t_alter
