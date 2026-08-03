@@ -81,8 +81,9 @@ SELECT SUM(CASE WHEN score >= 90 THEN 1 ELSE 0 END) FROM t_case
 ----
 2
 
-# CASE in ORDER BY — should sort NULLs last; zeta silently drops the
-# CASE term and orders by id only. Pinned to observed; see zeta #965.
+# CASE in ORDER BY — sorts NULLs last, non-null rows by id within each
+# bucket. Fixed by zeta #8b1bfed4 (#962, #965); was previously pinned to
+# the buggy id-only order.
 query II
 SELECT id, score FROM t_case
 ORDER BY CASE WHEN score IS NULL THEN 1 ELSE 0 END, id
@@ -90,8 +91,8 @@ ORDER BY CASE WHEN score IS NULL THEN 1 ELSE 0 END, id
 1 95
 2 75
 3 50
-4 NULL
 5 100
+4 NULL
 
 statement ok
 DROP TABLE t_case
