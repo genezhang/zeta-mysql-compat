@@ -1,5 +1,6 @@
 use anyhow::Result;
 use clap::Parser;
+use mysql_async::prelude::Queryable;
 use std::path::PathBuf;
 
 mod harness;
@@ -34,6 +35,14 @@ async fn main() -> Result<()> {
     let args = Args::parse();
 
     let mut zeta = harness::ZetaServer::start(&args.zeta_bin).await?;
+    // `test` is not pre-created by the server: `USE`/a handshake naming a missing database is
+    // error 1049, as in MySQL. Create it here, over a connection that names no database.
+    let mut admin =
+        mysql_async::Conn::new(mysql_async::Opts::from_url(&zeta.mysql_url(""))?).await?;
+    admin
+        .query_drop("CREATE DATABASE IF NOT EXISTS test")
+        .await?;
+    admin.disconnect().await?;
     let url = zeta.mysql_url("test");
     let result = slt_runner::run_suite(&args.suite, &url, args.filter.as_deref()).await;
     let _ = zeta.shutdown().await;
