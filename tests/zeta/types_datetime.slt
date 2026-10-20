@@ -7,6 +7,10 @@
 #   - DATETIME as a distinct type (zeta uses TIMESTAMP for both).
 #   - YEAR(4) / YEAR(2) — MySQL-only.
 #   - Per-second sub-precision encoding (DATETIME(6) etc).
+#
+# Records preceded by `onlyif zeta-mysql` are zeta extensions (PostgreSQL syntax or
+# functions MySQL does not have): MySQL rejects them, so they run for zeta only and
+# pin zeta's own answer. Every other record is what MySQL 8.4.6 answers.
 
 statement ok
 DROP TABLE IF EXISTS t_dt
@@ -31,6 +35,7 @@ SELECT id, d, ts, t FROM t_dt
 2 2026-12-31 2026-12-31 23:59:59 00:00:00
 
 # Date arithmetic via INTERVAL.
+onlyif zeta-mysql
 query T
 SELECT DATE '2026-01-15' + INTERVAL '7 days'
 ----
@@ -64,11 +69,13 @@ SELECT EXTRACT(MINUTE FROM TIMESTAMP '2026-01-15 12:34:56')
 34
 
 # DATE_TRUNC — truncating a timestamp to a coarser unit.
+onlyif zeta-mysql
 query T
 SELECT DATE_TRUNC('day', TIMESTAMP '2026-01-15 12:34:56')
 ----
 2026-01-15 00:00:00
 
+onlyif zeta-mysql
 query T
 SELECT DATE_TRUNC('month', TIMESTAMP '2026-01-15 12:34:56')
 ----

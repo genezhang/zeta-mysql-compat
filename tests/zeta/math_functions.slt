@@ -111,13 +111,12 @@ SELECT LEAST(1, 5, 3, 2)
 ----
 1
 
-# GREATEST / LEAST with NULL — MySQL would short-circuit to NULL but
-# zeta follows PG semantics (NULL skipped). Pinned to observed; see
-# zeta #971.
+# GREATEST / LEAST with NULL — MySQL returns NULL if any argument is NULL
+# (PostgreSQL skips NULLs); see zeta #971.
 query I
 SELECT GREATEST(1, NULL, 3)
 ----
-3
+NULL
 
 # LN — natural log.
 query T

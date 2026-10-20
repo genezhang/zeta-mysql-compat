@@ -1,14 +1,20 @@
 # JSON/JSONB over the MySQL wire. MySQL has a `JSON` type (since 5.7);
 # zeta has PG's `JSONB`. The shim should accept `JSON` as a synonym
 # but the on-wire type may differ.
+#
+# Records preceded by `onlyif zeta-mysql` are zeta extensions (PostgreSQL syntax or
+# functions MySQL does not have): MySQL rejects them, so they run for zeta only and
+# pin zeta's own answer. Every other record is what MySQL 8.4.6 answers.
 
 statement ok
 DROP TABLE IF EXISTS j_t
 
 # Try the PG type name.
+onlyif zeta-mysql
 statement ok
 CREATE TABLE j_t (id INT PRIMARY KEY, doc JSONB)
 
+onlyif zeta-mysql
 statement ok
 INSERT INTO j_t VALUES
   (1, '{"name": "Alice", "age": 30, "tags": ["a", "b"]}'),
@@ -16,6 +22,7 @@ INSERT INTO j_t VALUES
   (3, '{"name": "Carol", "age": 40}')
 
 # JSONB extraction — `->>` returns text.
+onlyif zeta-mysql
 query T rowsort
 SELECT doc ->> 'name' FROM j_t
 ----
@@ -25,40 +32,47 @@ Carol
 
 # `->` returns JSONB (as a string in result here). MySQL JSON format uses
 # space after comma.
+onlyif zeta-mysql
 query T
 SELECT (doc -> 'tags') FROM j_t WHERE id = 1
 ----
 ["a", "b"]
 
 # Nested extraction.
+onlyif zeta-mysql
 query T
 SELECT doc -> 'tags' ->> 0 FROM j_t WHERE id = 1
 ----
 a
 
 # JSONB containment.
+onlyif zeta-mysql
 query I
 SELECT COUNT(*) FROM j_t WHERE doc @> '{"name": "Alice"}'
 ----
 1
 
 # JSONB key existence.
+onlyif zeta-mysql
 query I
 SELECT COUNT(*) FROM j_t WHERE doc ? 'tags'
 ----
 2
 
 # JSONB_BUILD_OBJECT — MySQL JSON format uses spaces.
+onlyif zeta-mysql
 query T
 SELECT JSONB_BUILD_OBJECT('a', 1, 'b', 2)
 ----
 {"a": 1, "b": 2}
 
 # JSONB_TYPEOF.
+onlyif zeta-mysql
 query T
 SELECT JSONB_TYPEOF(doc -> 'age') FROM j_t WHERE id = 1
 ----
 number
 
+onlyif zeta-mysql
 statement ok
 DROP TABLE j_t

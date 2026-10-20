@@ -3,6 +3,10 @@
 # ... USING BTREE, ALTER TABLE ... ADD INDEX). Functional verification
 # that the index is honored by reads happens via querying with a WHERE
 # clause matched on the indexed column.
+#
+# Records preceded by `onlyif zeta-mysql` are zeta extensions (PostgreSQL syntax or
+# functions MySQL does not have): MySQL rejects them, so they run for zeta only and
+# pin zeta's own answer. Every other record is what MySQL 8.4.6 answers.
 
 statement ok
 DROP TABLE IF EXISTS idx_t
@@ -28,14 +32,14 @@ SELECT id FROM idx_t WHERE email = 'b@example.com'
 2
 
 # Unique index.
-statement ok
+statement error ERROR 1062
 CREATE UNIQUE INDEX idx_tag_uniq ON idx_t (tag)
 
-# Wait — actually data has tag='x' twice. The CREATE UNIQUE on existing
-# duplicate data should error. But if zeta is permissive at index
-# creation and only enforces on subsequent INSERT, we've documented
-# that. Following statement skipped/adjusted.
+# The data has tag='x' twice, and MySQL refuses to build a UNIQUE index over
+# duplicate data (error 1062). The PostgreSQL-style DROP INDEX spellings below
+# (no ON <table>) are zeta extensions, so they run for zeta only.
 
+onlyif zeta-mysql
 statement ok
 DROP INDEX idx_tag_uniq
 
@@ -43,17 +47,20 @@ DROP INDEX idx_tag_uniq
 statement ok
 CREATE INDEX idx_email_tag ON idx_t (email, tag)
 
+onlyif zeta-mysql
 statement ok
 DROP INDEX idx_email_tag
 
 # DROP INDEX referencing a non-existent name should error.
-statement error
+statement error ERROR 1064
 DROP INDEX idx_does_not_exist
 
 # DROP IF EXISTS — silent no-op on missing index.
+onlyif zeta-mysql
 statement ok
 DROP INDEX IF EXISTS idx_does_not_exist
 
+onlyif zeta-mysql
 statement ok
 DROP INDEX idx_email
 

@@ -18,11 +18,11 @@ statement ok
 INSERT INTO c_pk VALUES (1, 'Alice')
 
 # Duplicate PK: rejected.
-statement error
+statement error ERROR 1062
 INSERT INTO c_pk VALUES (1, 'AliceDup')
 
 # Missing PK: rejected (NULL not allowed).
-statement error
+statement error ERROR 1364
 INSERT INTO c_pk (name) VALUES ('Anon')
 
 statement ok
@@ -39,7 +39,7 @@ statement ok
 INSERT INTO c_unique VALUES (2, 'b@example.com')
 
 # Duplicate email: rejected.
-statement error
+statement error ERROR 1062
 INSERT INTO c_unique VALUES (3, 'a@example.com')
 
 # NULL is allowed multiple times in a UNIQUE column (PG/MySQL semantics).
@@ -65,11 +65,11 @@ statement ok
 INSERT INTO c_nn VALUES (1, 'Alice')
 
 # Missing required column: rejected.
-statement error
+statement error ERROR 1364
 INSERT INTO c_nn (id) VALUES (2)
 
 # Explicit NULL: rejected.
-statement error
+statement error ERROR 1048
 INSERT INTO c_nn VALUES (3, NULL)
 
 statement ok
@@ -86,7 +86,7 @@ statement ok
 INSERT INTO c_check VALUES (1, 25)
 
 # Negative age: rejected.
-statement error
+statement error ERROR 3819
 INSERT INTO c_check VALUES (2, -5)
 
 statement ok
@@ -106,11 +106,11 @@ statement ok
 INSERT INTO c_child VALUES (10, 1), (11, 2)
 
 # Insert child referencing missing parent: rejected.
-statement error
+statement error ERROR 1452
 INSERT INTO c_child VALUES (12, 99)
 
 # Delete parent that has children: rejected (RESTRICT).
-statement error
+statement error ERROR 1451
 DELETE FROM c_parent WHERE id = 1
 
 # After deleting children, the parent can be deleted.

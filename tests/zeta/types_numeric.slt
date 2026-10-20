@@ -43,7 +43,7 @@ SELECT id, i16, i32, i64, d FROM t_num
 query T
 SELECT 7 / 2
 ----
-3.50
+3.5000
 
 query I
 SELECT 7 % 2

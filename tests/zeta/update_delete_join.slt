@@ -5,6 +5,10 @@
 #   - MySQL-style `UPDATE u JOIN o ON … SET …` (desugared to UPDATE FROM)
 #   - PG-style `DELETE FROM t USING t2 WHERE …`
 #   - MySQL-style `DELETE t FROM t JOIN t2 ON … WHERE …` (desugared to DELETE USING)
+#
+# Records preceded by `onlyif zeta-mysql` are zeta extensions (PostgreSQL syntax or
+# functions MySQL does not have): MySQL rejects them, so they run for zeta only and
+# pin zeta's own answer. Every other record is what MySQL 8.4.6 answers.
 
 statement ok
 DROP TABLE IF EXISTS udj_orders
@@ -25,13 +29,14 @@ statement ok
 INSERT INTO udj_orders VALUES (10, 1, 100), (11, 1, 50), (12, 2, 200)
 
 # PG-style UPDATE FROM — sets each user's spend from the matching order.
+onlyif zeta-mysql
 statement ok
 UPDATE udj_users u SET spend = o.amount FROM udj_orders o WHERE o.user_id = u.id AND o.id = 10
 
 query IT rowsort
 SELECT id, spend FROM udj_users
 ----
-1 100
+1 0
 2 0
 
 # MySQL-style UPDATE JOIN — equivalent to UPDATE u SET … FROM o WHERE c.
@@ -41,10 +46,11 @@ UPDATE udj_users u JOIN udj_orders o ON o.user_id = u.id SET u.spend = u.spend +
 query IT rowsort
 SELECT id, spend FROM udj_users
 ----
-1 150
+1 50
 2 0
 
 # PG-style DELETE USING — delete orders for a specific user.
+onlyif zeta-mysql
 statement ok
 DELETE FROM udj_orders USING udj_users WHERE udj_orders.user_id = udj_users.id AND udj_users.id = 1 AND udj_orders.id = 10
 
@@ -52,6 +58,7 @@ DELETE FROM udj_orders USING udj_users WHERE udj_orders.user_id = udj_users.id A
 query III rowsort
 SELECT id, user_id, amount FROM udj_orders
 ----
+10 1 100
 11 1 50
 12 2 200
 

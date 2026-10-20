@@ -56,14 +56,12 @@ SELECT MAX(amount) FROM sales
 
 # AVG over integers — SUM/COUNT = 1100/5 = 220.
 #
-# Divergence: real MySQL returns DECIMAL(p, 4) for AVG over an integer
-# column, so the wire value is `220.0000`. Zeta drops the trailing
-# fractional digits and returns `220`. Same root cause as the DECIMAL
-# trailing-zero strip — pinned to observed behavior; see zeta #958.
+# MySQL returns DECIMAL(p, 4) for AVG over an integer column, so the wire value
+# is `220.0000`; see zeta #958 for where zeta differs.
 query T
 SELECT AVG(amount) FROM sales
 ----
-220
+220.0000
 
 # GROUP BY region.
 query TI rowsort
