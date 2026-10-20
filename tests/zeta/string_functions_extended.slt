@@ -4,6 +4,10 @@
 # Gaps tracked (#970): SUBSTRING_INDEX, INSTR, LOCATE, FORMAT are
 # unknown. They're pinned as `statement error` so a future fix lands
 # as a noisy diff.
+#
+# Records preceded by `onlyif zeta-mysql` are zeta extensions (PostgreSQL syntax or
+# functions MySQL does not have): MySQL rejects them, so they run for zeta only and
+# pin zeta's own answer. Every other record is what MySQL 8.4.6 answers.
 
 # POSITION — 1-based, returns 0 when not found.
 query I
@@ -29,11 +33,13 @@ SELECT REVERSE('hello')
 olleh
 
 # STARTS_WITH.
+onlyif zeta-mysql
 query I
 SELECT CASE WHEN STARTS_WITH('hello world', 'hello') THEN 1 ELSE 0 END
 ----
 1
 
+onlyif zeta-mysql
 query I
 SELECT CASE WHEN STARTS_WITH('hello world', 'world') THEN 1 ELSE 0 END
 ----
@@ -47,6 +53,7 @@ SELECT REGEXP_REPLACE('abc123def', '[0-9]+', 'X')
 abcXdef
 
 # SPLIT_PART — pull the Nth field of a delimiter-separated string.
+onlyif zeta-mysql
 query T
 SELECT SPLIT_PART('foo,bar,baz', ',', 2)
 ----

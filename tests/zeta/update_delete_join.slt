@@ -1,10 +1,15 @@
 # Multi-table UPDATE / DELETE over the MySQL wire — fixed in zeta #973.
 #
-# Two dialects, four shapes, all working now:
-#   - PG-style `UPDATE u SET … FROM o WHERE …`
-#   - MySQL-style `UPDATE u JOIN o ON … SET …` (desugared to UPDATE FROM)
-#   - PG-style `DELETE FROM t USING t2 WHERE …`
-#   - MySQL-style `DELETE t FROM t JOIN t2 ON … WHERE …` (desugared to DELETE USING)
+# MySQL spells the multi-table forms
+#   - `UPDATE u JOIN o ON … SET …`
+#   - `DELETE t FROM t JOIN t2 ON … WHERE …`
+# (zeta desugars them to UPDATE FROM / DELETE USING). The PostgreSQL spellings `UPDATE u SET … FROM o` and
+# `DELETE FROM t USING t2` are zeta extensions that MySQL rejects; they are exercised on tables of their own at the
+# end of this file, so that their effects cannot change what the MySQL-valid records above see.
+#
+# Records preceded by `onlyif zeta-mysql` are zeta extensions (PostgreSQL syntax or
+# functions MySQL does not have): MySQL rejects them, so they run for zeta only and
+# pin zeta's own answer. Every other record is what MySQL 8.4.6 answers.
 
 statement ok
 DROP TABLE IF EXISTS udj_orders
@@ -24,38 +29,17 @@ INSERT INTO udj_users VALUES (1, 'Alice', 0), (2, 'Bob', 0)
 statement ok
 INSERT INTO udj_orders VALUES (10, 1, 100), (11, 1, 50), (12, 2, 200)
 
-# PG-style UPDATE FROM — sets each user's spend from the matching order.
-statement ok
-UPDATE udj_users u SET spend = o.amount FROM udj_orders o WHERE o.user_id = u.id AND o.id = 10
-
-query IT rowsort
-SELECT id, spend FROM udj_users
-----
-1 100
-2 0
-
-# MySQL-style UPDATE JOIN — equivalent to UPDATE u SET … FROM o WHERE c.
+# MySQL-style UPDATE JOIN — add the matching order's amount to the user's spend.
 statement ok
 UPDATE udj_users u JOIN udj_orders o ON o.user_id = u.id SET u.spend = u.spend + o.amount WHERE o.id = 11
 
 query IT rowsort
 SELECT id, spend FROM udj_users
 ----
-1 150
+1 50
 2 0
 
-# PG-style DELETE USING — delete orders for a specific user.
-statement ok
-DELETE FROM udj_orders USING udj_users WHERE udj_orders.user_id = udj_users.id AND udj_users.id = 1 AND udj_orders.id = 10
-
-# After: orders 11 (user 1) and 12 (user 2) survive.
-query III rowsort
-SELECT id, user_id, amount FROM udj_orders
-----
-11 1 50
-12 2 200
-
-# MySQL-style DELETE JOIN — delete remaining orders for user 1.
+# MySQL-style DELETE JOIN — delete the orders of user 1.
 statement ok
 DELETE o FROM udj_orders o JOIN udj_users u ON o.user_id = u.id WHERE u.id = 1
 
@@ -70,3 +54,62 @@ DROP TABLE udj_orders
 
 statement ok
 DROP TABLE udj_users
+
+# --- zeta extensions: the PostgreSQL spellings, on their own tables.
+
+onlyif zeta-mysql
+statement ok
+DROP TABLE IF EXISTS udj_orders_pg
+
+onlyif zeta-mysql
+statement ok
+DROP TABLE IF EXISTS udj_users_pg
+
+onlyif zeta-mysql
+statement ok
+CREATE TABLE udj_users_pg (id INT PRIMARY KEY, name VARCHAR(50), spend INT)
+
+onlyif zeta-mysql
+statement ok
+CREATE TABLE udj_orders_pg (id INT PRIMARY KEY, user_id INT, amount INT)
+
+onlyif zeta-mysql
+statement ok
+INSERT INTO udj_users_pg VALUES (1, 'Alice', 0), (2, 'Bob', 0)
+
+onlyif zeta-mysql
+statement ok
+INSERT INTO udj_orders_pg VALUES (10, 1, 100), (11, 1, 50), (12, 2, 200)
+
+# PG-style UPDATE FROM — sets each user's spend from the matching order.
+onlyif zeta-mysql
+statement ok
+UPDATE udj_users_pg u SET spend = o.amount FROM udj_orders_pg o WHERE o.user_id = u.id AND o.id = 10
+
+onlyif zeta-mysql
+query IT rowsort
+SELECT id, spend FROM udj_users_pg
+----
+1 100
+2 0
+
+# PG-style DELETE USING — delete one order of a specific user.
+onlyif zeta-mysql
+statement ok
+DELETE FROM udj_orders_pg USING udj_users_pg WHERE udj_orders_pg.user_id = udj_users_pg.id AND udj_users_pg.id = 1 AND udj_orders_pg.id = 10
+
+# After: orders 11 (user 1) and 12 (user 2) survive.
+onlyif zeta-mysql
+query III rowsort
+SELECT id, user_id, amount FROM udj_orders_pg
+----
+11 1 50
+12 2 200
+
+onlyif zeta-mysql
+statement ok
+DROP TABLE udj_orders_pg
+
+onlyif zeta-mysql
+statement ok
+DROP TABLE udj_users_pg

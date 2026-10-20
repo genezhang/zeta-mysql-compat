@@ -37,7 +37,7 @@ CREATE VIEW v_join AS
   SELECT active, COUNT(*) AS n
   FROM v_users GROUP BY active
 
-query IB rowsort
+query I? rowsort
 SELECT n, active FROM v_join
 ----
 1 0

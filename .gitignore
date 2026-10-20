@@ -1,4 +1,7 @@
 /target
+target/
 Cargo.lock
 *.swp
 .DS_Store
+*.slt.primed
+*.slt.primed.temp

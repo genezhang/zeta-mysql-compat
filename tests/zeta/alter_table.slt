@@ -6,7 +6,7 @@
 # Gaps tracked:
 #   - ADD COLUMN ... DEFAULT does NOT backfill existing rows (#963).
 #   - CHANGE COLUMN / MODIFY COLUMN are rejected by the parser (#964).
-# Both are pinned to observed behavior.
+# Both are fixed now; the expectations below are what MySQL 8.4.6 answers.
 
 statement ok
 DROP TABLE IF EXISTS t_alter
@@ -30,12 +30,17 @@ SELECT id, active FROM t_alter
 
 # But NEW inserts after the ALTER do get the default.
 statement ok
-INSERT INTO t_alter VALUES (3, 'gamma')
+INSERT INTO t_alter (id, name) VALUES (3, 'gamma')
 
 query I
 SELECT active FROM t_alter WHERE id = 3
 ----
 1
+
+# MySQL rejects an INSERT with fewer values than the table has columns (error 1136); the earlier pin in this file
+# had zeta filling in the default instead, which MySQL does not do.
+statement error ERROR 1136
+INSERT INTO t_alter VALUES (4, 'delta')
 
 # ADD COLUMN nullable, no default.
 statement ok
