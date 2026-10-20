@@ -52,7 +52,9 @@ impl ZetaServer {
             .arg("--storage-backend")
             .arg("memory")
             .stdin(Stdio::null())
-            .stdout(Stdio::piped())
+            // Nothing reads stdout, and a pipe nobody drains stalls zeta for good once its 64 KiB buffer
+            // fills (every thread blocks in write), so send it nowhere.
+            .stdout(Stdio::null())
             .stderr(Stdio::piped())
             .kill_on_drop(true);
 
@@ -141,16 +143,49 @@ fn pick_free_port() -> Result<u16> {
     Ok(port)
 }
 
+/// Reads one line as raw bytes and decodes it lossily. `Lines::next_line` fails with `InvalidData` on a
+/// non-UTF-8 byte, and a drain that bails out drops the read end of the pipe: zeta's next log write then fails or
+/// blocks, which is the failure the drain exists to prevent.
+async fn next_lossy_line<R: AsyncBufReadExt + Unpin>(r: &mut R) -> std::io::Result<Option<String>> {
+    let mut raw = Vec::new();
+    if r.read_until(b'\n', &mut raw).await? == 0 {
+        return Ok(None);
+    }
+    while matches!(raw.last(), Some(b'\n' | b'\r')) {
+        raw.pop();
+    }
+    Ok(Some(String::from_utf8_lossy(&raw).into_owned()))
+}
+
 async fn wait_for_ready(stderr: tokio::process::ChildStderr, expected_port: u16) -> Result<()> {
     // Banner from zeta-server-bin: "Zeta MySQL wire listener ready on <bind>:<port> ..."
     let pat = Regex::new(r"Zeta MySQL wire listener ready on \S+:(\d+)").expect("compile regex");
 
-    let mut lines = BufReader::new(stderr).lines();
-    while let Some(line) = lines.next_line().await? {
+    let mut lines = BufReader::new(stderr);
+    while let Some(line) = next_lossy_line(&mut lines).await? {
         eprintln!("[zeta] {}", line);
         if let Some(caps) = pat.captures(&line) {
             let reported: u16 = caps[1].parse().unwrap_or(0);
             if reported == expected_port {
+                // Keep draining: a closed read end makes zeta's later log writes fail, a full one blocks them.
+                // Forward the lines so a crash or panic stays visible, and say when the stream ends.
+                tokio::spawn(async move {
+                    loop {
+                        match next_lossy_line(&mut lines).await {
+                            Ok(Some(line)) => eprintln!("[zeta] {}", line),
+                            Ok(None) => {
+                                eprintln!(
+                                    "[zeta] stderr closed: the server exited or closed its log"
+                                );
+                                break;
+                            }
+                            Err(e) => {
+                                eprintln!("[zeta] stderr read failed: {e}");
+                                break;
+                            }
+                        }
+                    }
+                });
                 return Ok(());
             }
             return Err(anyhow!(
