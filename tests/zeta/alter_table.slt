@@ -6,7 +6,7 @@
 # Gaps tracked:
 #   - ADD COLUMN ... DEFAULT does NOT backfill existing rows (#963).
 #   - CHANGE COLUMN / MODIFY COLUMN are rejected by the parser (#964).
-# Both are pinned to observed behavior.
+# Both are fixed now; the expectations below are what MySQL 8.4.6 answers.
 
 statement ok
 DROP TABLE IF EXISTS t_alter

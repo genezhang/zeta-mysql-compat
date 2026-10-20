@@ -29,7 +29,7 @@ cargo run -- --zeta-bin /path/to/zeta --suite zeta
 
 ## Where the expectations come from
 
-The expected results in `tests/zeta/*.slt` are what a real MySQL 8.4.6 answers, not what zeta printed when the test was written: query results, whether each statement succeeds or fails, and the error number of a failure (`statement error ERROR 1062`; the message text is not compared). Re-derive them with a throwaway MySQL (`--default-time-zone=+00:00`, default `sql_mode`; **its non-system databases are dropped**):
+The expected results in `tests/zeta/*.slt` are what a real MySQL 8.4.6 answers, not what zeta printed when the test was written: query results, whether each statement succeeds or fails, and the error number of a failure (`statement error ERROR 1062`; the message text is not compared). Re-derive them, from the repository root (the runner finds `tests/` relative to the current directory), with a throwaway MySQL (`--default-time-zone=+00:00`, default `sql_mode`; **its non-system databases are dropped**):
 
 ```
 cargo run --release -- --update-from-oracle mysql://root@127.0.0.1:33306

@@ -37,11 +37,8 @@ CREATE UNIQUE INDEX idx_tag_uniq ON idx_t (tag)
 
 # The data has tag='x' twice, and MySQL refuses to build a UNIQUE index over
 # duplicate data (error 1062). The PostgreSQL-style DROP INDEX spellings below
-# (no ON <table>) are zeta extensions, so they run for zeta only.
-
-onlyif zeta-mysql
-statement ok
-DROP INDEX idx_tag_uniq
+# (no ON <table>) are zeta extensions, so they run for zeta only; the indexes
+# stay behind on MySQL, which does not matter to the records after them.
 
 # Multi-column index.
 statement ok
