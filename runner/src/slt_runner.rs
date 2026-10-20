@@ -104,9 +104,11 @@ pub async fn update_from_oracle(
 
         // A bare `statement error` accepts any error, so it would never learn which one MySQL gives: make it
         // fail to match first, and the update then records the real number (or turns it into `statement ok`).
+        // The update works on a copy, so the file itself is only ever replaced by a finished result: an interrupted
+        // run leaves it as it was.
         let before = std::fs::read_to_string(file)?;
-        let primed = prime_bare_errors(&before);
-        std::fs::write(file, &primed)?;
+        let work = file.with_extension("slt.primed");
+        std::fs::write(&work, prime_bare_errors(&before))?;
 
         eprintln!("→ {}", file.display());
         let make_conn = {
@@ -119,15 +121,14 @@ pub async fn update_from_oracle(
         let mut runner = sqllogictest::Runner::new(make_conn);
         let res = runner
             .update_test_file(
-                file,
+                &work,
                 " ",
                 sqllogictest::default_validator,
                 sqllogictest::default_column_validator,
             )
             .await;
         if let Err(e) = res {
-            // Leave the file as it was.
-            std::fs::write(file, &before)?;
+            let _ = std::fs::remove_file(&work);
             return Err(anyhow!("updating {}: {e}", file.display()));
         }
         // A record that succeeded for zeta's pin but fails on MySQL is either a zeta extension (PostgreSQL syntax,
@@ -135,7 +136,8 @@ pub async fn update_from_oracle(
         // person can tell which. By default the oracle's answer is written, and the record is listed; with
         // --mark-zeta-extensions it is put back under `onlyif zeta-mysql` (run for zeta only, pinned to zeta's own
         // answer). A record already marked `onlyif zeta-mysql` is never touched by an update.
-        let updated = std::fs::read_to_string(file)?;
+        let updated = std::fs::read_to_string(&work)?;
+        std::fs::remove_file(&work)?;
         for line in flipped_records(&before, &updated) {
             flips += 1;
             eprintln!("  success -> MySQL error: {line}");
@@ -145,10 +147,8 @@ pub async fn update_from_oracle(
         } else {
             updated.clone()
         };
-        if restored != updated {
-            std::fs::write(file, &restored)?;
-        }
         if restored != before {
+            std::fs::write(file, &restored)?;
             changed += 1;
         }
     }
